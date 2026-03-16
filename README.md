@@ -1,2 +1,3 @@
 # ia-codyssey
-Github와 Codyssey를 연동
+
+문제 1 미션 컴퓨터를 복구하고 사고 원인을 파악해 보자
