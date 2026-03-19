@@ -1,6 +1,28 @@
+LOG_FILE = 'mission_computer_main.log'
+ERROR_LOG_FILE = 'error_log.txt'
+
 try:
-    with open('mission_computer_main.log', 'r') as f:
-        print(f.read())
+    with open(LOG_FILE, 'r') as log_file:
+        line = log_file.readlines()
+        header = line[0]
+        log_data = line[1:]
+        log_data.reverse()
+
+        print(header, end='')
+        for line in log_data:
+            print(line, end='')
+
+    error_text = []
+    for extract in log_data:
+        if 'unstable' in extract or 'explosion' in extract:
+            error_text.append(extract)
+
+    with open(ERROR_LOG_FILE, 'w') as error_log_file:
+        for apply in error_text:
+            error_log_file.write(apply)
+
+    print()
+    print('Error Log extraction complete : ' + ERROR_LOG_FILE)
 
 except FileNotFoundError:
     print('Error: 파일을 찾을 수 없습니다.')
@@ -14,5 +36,5 @@ except UnicodeDecodeError:
 except IsADirectoryError:
     print('Error: 파일이 아닌 디렉토리입니다.')
 
-except Exception as e:
-    print(f'Error: {e}')
+except Exception as error:
+    print('Error: ' + str(error))
