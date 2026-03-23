@@ -1,8 +1,11 @@
 # Mars.py
 # 화성 기지 인화성 물질 분류 시스템
 
+import pickle
+
 READ_FILE = 'Mars_Base_Inventory_List.csv'
 WRITE_FILE = 'Mars_Base_Inventory_danger.csv'
+BIN_FILE = 'Mars_Base_Inventory_List.bin'
 DANGER_THRESHOLD = 0.7
 
 
@@ -130,31 +133,89 @@ def save_csv(items, file_path):
         print(f'[오류] 파일 저장 실패: {e}')
 
 
+def save_bin(items, file_path):
+    """정렬된 딕셔너리 리스트를 이진 파일로 저장하고 검증한다."""
+    if not items:
+        print('[안내] 저장할 데이터가 없습니다.')
+        return False
+
+    try:
+        # 'wb': write binary — 이진 쓰기 모드
+        # pickle.dump(): Python 객체를 바이트로 변환해서 파일에 저장
+        with open(file_path, 'wb') as f:
+            pickle.dump(items, f)
+
+        # 저장 검증: 파일 크기 확인
+        # 'rb': read binary — 이진 읽기 모드
+        with open(file_path, 'rb') as f:
+            f.seek(0, 2)       # 파일 끝으로 이동 (C의 fseek(fp, 0, SEEK_END))
+            file_size = f.tell()  # 현재 위치 = 파일 크기 (bytes)
+
+        if file_size > 0:
+            print(f'[완료] 이진 파일 저장 성공: {file_path}')
+            print(f'[검증] 파일 크기: {file_size} bytes → 정상')
+            return True
+        else:
+            print(f'[오류] 파일이 비어 있습니다: {file_path}')
+            return False
+
+    except PermissionError:
+        print(f'[오류] 파일 쓰기 권한이 없습니다: {file_path}')
+        return False
+    except OSError as e:
+        print(f'[오류] 파일 저장 실패: {e}')
+        return False
+
+
+def load_bin(file_path):
+    """이진 파일을 읽어서 딕셔너리 리스트로 반환한다."""
+    try:
+        # 'rb': read binary — 이진 읽기 모드
+        # pickle.load(): 바이트를 Python 객체로 복원
+        with open(file_path, 'rb') as f:
+            items = pickle.load(f)
+
+        print(f'[완료] 이진 파일 읽기 성공: {file_path} ({len(items)}개 항목)')
+        return items
+
+    except FileNotFoundError:
+        print(f'[오류] 파일을 찾을 수 없습니다: {file_path}')
+        print('[안내] 먼저 11번으로 이진 파일을 저장해주세요.')
+    except PermissionError:
+        print(f'[오류] 파일 읽기 권한이 없습니다: {file_path}')
+    except OSError as e:
+        print(f'[오류] 파일 읽기 실패: {e}')
+
+    return []
+
+
 def verify_data(rows, items):
     """원본 CSV 데이터와 변환된 리스트가 일치하는지 검증한다."""
     print('\n=== 데이터 검증 ===')
 
-    # 1. 행 수 비교 (헤더 제외)
     csv_count = len(rows) - 1
     list_count = len(items)
     count_ok = csv_count == list_count
     print(f'행 수 일치:     CSV {csv_count}개 / 리스트 {list_count}개 → {"OK" if count_ok else "불일치!"}')
 
-    # 2. 헤더 비교
     csv_headers = rows[0]
     list_headers = list(items[0].keys()) if items else []
     header_ok = csv_headers == list_headers
     print(f'헤더 일치:      {csv_headers} → {"OK" if header_ok else "불일치!"}')
 
-    # 3. 각 행 데이터 비교
     mismatch = 0
     for i, (row, item) in enumerate(zip(rows[1:], items)):
         for j, key in enumerate(csv_headers):
             csv_val = row[j]
-            list_val = str(item[key])
-            if csv_val != list_val:
-                mismatch += 1
-                print(f'  [불일치] {i+1}행 {key}: CSV="{csv_val}" / 리스트="{list_val}"')
+            list_val = item[key]
+            try:
+                if float(csv_val) != float(list_val):
+                    mismatch += 1
+                    print(f'  [불일치] {i+1}행 {key}: CSV="{csv_val}" / 리스트="{list_val}"')
+            except ValueError:
+                if csv_val != str(list_val):
+                    mismatch += 1
+                    print(f'  [불일치] {i+1}행 {key}: CSV="{csv_val}" / 리스트="{list_val}"')
 
     if mismatch == 0:
         print(f'값 일치:        전체 {csv_count}행 모두 일치 → OK')
@@ -164,21 +225,22 @@ def verify_data(rows, items):
 
 def print_menu():
     """메뉴를 출력한다."""
-    title = '화성 기지 인화성 물질 분류 시스템'
-    inner = f'| {title} |'
-    border = '+' + '-' * (len(inner) - 2) + '+'
+    title = '화성 기지 인화성 물질 분류'
+    border = '=' * (len(title) + 2)
 
     print(border)
-    print(inner)
+    print(f' {title}')
     print(border)
-    print('1. 파일 출력')
-    print('2. 리스트 변환 후 출력')
-    print('3. 인화성 높은 순으로 정렬')
-    print('4. 인화성 0.7 이상 목록 출력')
-    print('5. 인화성 0.7 이상 목록 CSV 저장')
-    print('6. 데이터 검증')
-    print('0. 종료')
-    print('-' * len(inner))
+    print('1.  파일 출력')
+    print('2.  리스트 변환 후 출력')
+    print('3.  인화성 높은 순으로 정렬')
+    print('4.  인화성 0.7 이상 목록 출력')
+    print('5.  인화성 0.7 이상 목록 CSV 저장')
+    print('6.  데이터 검증')
+    print('11. 정렬된 목록 이진 파일 저장')
+    print('12. 이진 파일 읽어서 출력')
+    print('0.  종료')
+    print('-' * (len(title) + 2))
 
 
 def main():
@@ -218,12 +280,22 @@ def main():
         elif choice == '6':
             verify_data(rows, items)
 
+        elif choice == '11':
+            print('\n=== 11. 정렬된 목록 이진 파일 저장 ===')
+            save_bin(sorted_items, BIN_FILE)
+
+        elif choice == '12':
+            print('\n=== 12. 이진 파일 읽어서 출력 ===')
+            bin_items = load_bin(BIN_FILE)
+            if bin_items:
+                print_table(items_to_rows(bin_items))
+
         elif choice == '0':
             print('종료합니다.')
             break
 
         else:
-            print('[안내] 0~6 사이 번호를 입력하세요.')
+            print('[안내] 올바른 번호를 입력하세요.')
 
         input('\n계속하려면 Enter 를 누르세요...')
 
