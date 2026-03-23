@@ -1,8 +1,6 @@
 # Mars.py
 # 화성 기지 인화성 물질 분류 시스템
 
-import pickle
-
 READ_FILE = 'Mars_Base_Inventory_List.csv'
 WRITE_FILE = 'Mars_Base_Inventory_danger.csv'
 BIN_FILE = 'Mars_Base_Inventory_List.bin'
@@ -10,7 +8,7 @@ DANGER_THRESHOLD = 0.7
 
 
 def read_csv(file_path):
-    """CSV 파일을 한 번만 읽어서 2차원 리스트로 반환한다."""
+    # CSV 파일을 한 번만 읽어서 2차원 리스트로 반환한다.
     rows = []
 
     try:
@@ -34,7 +32,7 @@ def read_csv(file_path):
 
 
 def print_table(rows):
-    """2차원 리스트를 TABLE처럼 정렬해서 출력한다."""
+    # 2차원 리스트를 TABLE처럼 정렬해서 출력한다.
     if not rows:
         print('[안내] 출력할 데이터가 없습니다.')
         return
@@ -63,7 +61,7 @@ def print_table(rows):
 
 
 def to_list(rows):
-    """메모리의 2차원 리스트를 딕셔너리 리스트로 변환한다."""
+    # 메모리의 2차원 리스트를 딕셔너리 리스트로 변환한다.
     if not rows:
         return []
 
@@ -82,7 +80,7 @@ def to_list(rows):
 
 
 def sort_by_flammability(items):
-    """딕셔너리 리스트를 인화성 지수 기준 내림차순으로 정렬해서 반환한다."""
+    # 딕셔너리 리스트를 인화성 지수 기준 내림차순으로 정렬해서 반환한다.
     if not items:
         return []
 
@@ -90,7 +88,7 @@ def sort_by_flammability(items):
 
 
 def filter_dangerous(items, threshold):
-    """인화성 지수가 기준값 이상인 항목만 필터링해서 반환한다."""
+    # 인화성 지수가 기준값 이상인 항목만 필터링해서 반환한다.
     if not items:
         return []
 
@@ -98,7 +96,7 @@ def filter_dangerous(items, threshold):
 
 
 def items_to_rows(items):
-    """딕셔너리 리스트를 2차원 리스트(헤더 포함)로 변환한다."""
+    # 딕셔너리 리스트를 2차원 리스트(헤더 포함)로 변환한다.
     if not items:
         return []
 
@@ -111,7 +109,7 @@ def items_to_rows(items):
 
 
 def save_csv(items, file_path):
-    """딕셔너리 리스트를 CSV 파일로 저장한다."""
+    # 딕셔너리 리스트를 CSV 파일로 저장한다.
     if not items:
         print('[안내] 저장할 데이터가 없습니다.')
         return
@@ -134,22 +132,29 @@ def save_csv(items, file_path):
 
 
 def save_bin(items, file_path):
-    """정렬된 딕셔너리 리스트를 이진 파일로 저장하고 검증한다."""
+    # 정렬된 딕셔너리 리스트를 이진 파일로 저장하고 검증한다.
+    # 저장 형식 (한 줄 = 한 항목): key1=val1|key2=val2|key3=val3
+    # import 없이 Python 내장 encode() 만 사용.
     if not items:
         print('[안내] 저장할 데이터가 없습니다.')
         return False
 
     try:
+        # 딕셔너리 리스트 → 텍스트 → UTF-8 바이트로 변환
+        lines = []
+        for item in items:
+            pairs = [f'{k}={v}' for k, v in item.items()]
+            lines.append('|'.join(pairs))
+        data = '\n'.join(lines).encode('utf-8')
+
         # 'wb': write binary — 이진 쓰기 모드
-        # pickle.dump(): Python 객체를 바이트로 변환해서 파일에 저장
         with open(file_path, 'wb') as f:
-            pickle.dump(items, f)
+            f.write(data)
 
         # 저장 검증: 파일 크기 확인
-        # 'rb': read binary — 이진 읽기 모드
         with open(file_path, 'rb') as f:
-            f.seek(0, 2)       # 파일 끝으로 이동 (C의 fseek(fp, 0, SEEK_END))
-            file_size = f.tell()  # 현재 위치 = 파일 크기 (bytes)
+            f.seek(0, 2)          # 파일 끝으로 이동
+            file_size = f.tell()  # 현재 위치 = 파일 크기
 
         if file_size > 0:
             print(f'[완료] 이진 파일 저장 성공: {file_path}')
@@ -168,12 +173,35 @@ def save_bin(items, file_path):
 
 
 def load_bin(file_path):
-    """이진 파일을 읽어서 딕셔너리 리스트로 반환한다."""
+    # 이진 파일을 읽어서 딕셔너리 리스트로 반환한다.
+    # UTF-8 바이트 → 텍스트 → 딕셔너리 리스트로 복원한다.
+    # import 없이 Python 내장 decode() 만 사용.
     try:
         # 'rb': read binary — 이진 읽기 모드
-        # pickle.load(): 바이트를 Python 객체로 복원
         with open(file_path, 'rb') as f:
-            items = pickle.load(f)
+            data = f.read()
+
+        # UTF-8 바이트 → 텍스트 → 딕셔너리 리스트 복원
+        items = []
+        for line in data.decode('utf-8').split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            item = {}
+            for pair in line.split('|'):
+                parts = pair.split('=', 1)
+                if len(parts) == 2:
+                    key, val = parts
+                    # Flammability 만 float 으로 복원
+                    if key == 'Flammability':
+                        try:
+                            item[key] = float(val)
+                        except ValueError:
+                            item[key] = val
+                    else:
+                        item[key] = val
+            if item:
+                items.append(item)
 
         print(f'[완료] 이진 파일 읽기 성공: {file_path} ({len(items)}개 항목)')
         return items
@@ -190,7 +218,7 @@ def load_bin(file_path):
 
 
 def verify_data(rows, items):
-    """원본 CSV 데이터와 변환된 리스트가 일치하는지 검증한다."""
+    # 원본 CSV 데이터와 변환된 리스트가 일치하는지 검증한다.
     print('\n=== 데이터 검증 ===')
 
     csv_count = len(rows) - 1
@@ -224,26 +252,27 @@ def verify_data(rows, items):
 
 
 def print_menu():
-    """메뉴를 출력한다."""
+    # 메뉴를 출력한다.
     title = '화성 기지 인화성 물질 분류'
-    border = '=' * (len(title) + 2)
 
-    print(border)
+    print('============================')
     print(f' {title}')
-    print(border)
+    print('============================')
     print('1.  파일 출력')
     print('2.  리스트 변환 후 출력')
     print('3.  인화성 높은 순으로 정렬')
     print('4.  인화성 0.7 이상 목록 출력')
     print('5.  인화성 0.7 이상 목록 CSV 저장')
     print('6.  데이터 검증')
+    print()
     print('11. 정렬된 목록 이진 파일 저장')
     print('12. 이진 파일 읽어서 출력')
     print('0.  종료')
-    print('-' * (len(title) + 2))
+    print('----------------------------')
 
 
 def main():
+    # 시작 시 데이터를 한 번만 읽어서 메모리에 준비한다.
     rows = read_csv(READ_FILE)
     items = to_list(rows)
     sorted_items = sort_by_flammability(items)
