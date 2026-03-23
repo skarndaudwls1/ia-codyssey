@@ -99,7 +99,6 @@ def items_to_rows(items):
     if not items:
         return []
 
-    # 딕셔너리 키를 헤더로, 값을 데이터 행으로 변환
     headers = list(items[0].keys())
     rows = [headers]
     for item in items:
@@ -131,22 +130,58 @@ def save_csv(items, file_path):
         print(f'[오류] 파일 저장 실패: {e}')
 
 
+def verify_data(rows, items):
+    """원본 CSV 데이터와 변환된 리스트가 일치하는지 검증한다."""
+    print('\n=== 데이터 검증 ===')
+
+    # 1. 행 수 비교 (헤더 제외)
+    csv_count = len(rows) - 1
+    list_count = len(items)
+    count_ok = csv_count == list_count
+    print(f'행 수 일치:     CSV {csv_count}개 / 리스트 {list_count}개 → {"OK" if count_ok else "불일치!"}')
+
+    # 2. 헤더 비교
+    csv_headers = rows[0]
+    list_headers = list(items[0].keys()) if items else []
+    header_ok = csv_headers == list_headers
+    print(f'헤더 일치:      {csv_headers} → {"OK" if header_ok else "불일치!"}')
+
+    # 3. 각 행 데이터 비교
+    mismatch = 0
+    for i, (row, item) in enumerate(zip(rows[1:], items)):
+        for j, key in enumerate(csv_headers):
+            csv_val = row[j]
+            list_val = str(item[key])
+            if csv_val != list_val:
+                mismatch += 1
+                print(f'  [불일치] {i+1}행 {key}: CSV="{csv_val}" / 리스트="{list_val}"')
+
+    if mismatch == 0:
+        print(f'값 일치:        전체 {csv_count}행 모두 일치 → OK')
+    else:
+        print(f'값 불일치:      {mismatch}개 항목 불일치!')
+
+
 def print_menu():
     """메뉴를 출력한다."""
-    print('\n==============================')
-    print('  화성 기지 인화성 물질 분류 시스템')
-    print('==============================')
+    title = '화성 기지 인화성 물질 분류 시스템'
+    inner = f'| {title} |'
+    border = '+' + '-' * (len(inner) - 2) + '+'
+
+    print(border)
+    print(inner)
+    print(border)
     print('1. 파일 출력')
     print('2. 리스트 변환 후 출력')
     print('3. 인화성 높은 순으로 정렬')
     print('4. 인화성 0.7 이상 목록 출력')
     print('5. 인화성 0.7 이상 목록 CSV 저장')
+    print('6. 데이터 검증')
     print('0. 종료')
-    print('------------------------------')
+    print('-' * len(inner))
 
 
 def main():
-    # 시작 시 데이터 준비 (한 번만 읽기)
     rows = read_csv(READ_FILE)
     items = to_list(rows)
     sorted_items = sort_by_flammability(items)
@@ -161,9 +196,12 @@ def main():
             print_table(rows)
 
         elif choice == '2':
-            print('\n=== 2. 리스트 변환 결과 ===')
-            for item in items:
-                print(f'{item["Substance"]:<25} {item["Flammability"]}')
+            print('\n=== 2. 리스트 변환 전후 비교 ===')
+            print('\n[ 변환 전 — 2차원 리스트 (상위 3개) ]')
+            print_table(rows[:4])
+            print('\n[ 변환 후 — 딕셔너리 리스트 (상위 3개) ]')
+            for item in items[:3]:
+                print(item)
 
         elif choice == '3':
             print('\n=== 3. 인화성 높은 순 정렬 ===')
@@ -177,12 +215,17 @@ def main():
             print('\n=== 5. 위험 물질 CSV 저장 ===')
             save_csv(danger_items, WRITE_FILE)
 
+        elif choice == '6':
+            verify_data(rows, items)
+
         elif choice == '0':
             print('종료합니다.')
             break
 
         else:
-            print('[안내] 0~5 사이 번호를 입력하세요.')
+            print('[안내] 0~6 사이 번호를 입력하세요.')
+
+        input('\n계속하려면 Enter 를 누르세요...')
 
 
 if __name__ == '__main__':
