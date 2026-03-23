@@ -255,10 +255,8 @@ def verify_data(rows, items):
 
 def print_menu():
     # 메뉴를 출력한다.
-    title = '화성 기지 인화성 물질 분류'
-
     print('============================')
-    print(f' {title}')
+    print('화성 기지 인화성 물질 분류')
     print('============================')
     print('1.  파일 출력')
     print('2.  리스트 변환 후 출력')
