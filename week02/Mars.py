@@ -2,6 +2,7 @@
 # 화성 기지 인화성 물질 분류 시스템
 
 READ_FILE = 'Mars_Base_Inventory_List.csv'
+WRITE_FILE = 'Mars_Base_Inventory_danger.csv'
 DANGER_THRESHOLD = 0.7
 
 
@@ -90,26 +91,98 @@ def filter_dangerous(items, threshold):
     if not items:
         return []
 
-    # 리스트 컴프리헨션: 조건에 맞는 항목만 골라서 새 리스트 만들기
-    # [결과 for 항목 in 리스트 if 조건]
     return [item for item in items if item['Flammability'] >= threshold]
 
 
+def items_to_rows(items):
+    """딕셔너리 리스트를 2차원 리스트(헤더 포함)로 변환한다."""
+    if not items:
+        return []
+
+    # 딕셔너리 키를 헤더로, 값을 데이터 행으로 변환
+    headers = list(items[0].keys())
+    rows = [headers]
+    for item in items:
+        rows.append([str(v) for v in item.values()])
+
+    return rows
+
+
+def save_csv(items, file_path):
+    """딕셔너리 리스트를 CSV 파일로 저장한다."""
+    if not items:
+        print('[안내] 저장할 데이터가 없습니다.')
+        return
+
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            headers = list(items[0].keys())
+            f.write(','.join(headers) + '\n')
+
+            for item in items:
+                values = [str(v) for v in item.values()]
+                f.write(','.join(values) + '\n')
+
+        print(f'[완료] 저장 성공: {file_path}')
+
+    except PermissionError:
+        print(f'[오류] 파일 쓰기 권한이 없습니다: {file_path}')
+    except OSError as e:
+        print(f'[오류] 파일 저장 실패: {e}')
+
+
+def print_menu():
+    """메뉴를 출력한다."""
+    print('\n==============================')
+    print('  화성 기지 인화성 물질 분류 시스템')
+    print('==============================')
+    print('1. 파일 출력')
+    print('2. 리스트 변환 후 출력')
+    print('3. 인화성 높은 순으로 정렬')
+    print('4. 인화성 0.7 이상 목록 출력')
+    print('5. 인화성 0.7 이상 목록 CSV 저장')
+    print('0. 종료')
+    print('------------------------------')
+
+
 def main():
-    rows = read_csv(READ_FILE)                  # 1번: 파일 읽기
-    print_table(rows)                           # 1번: 출력
-    items = to_list(rows)                       # 2번: 리스트 변환
-    sorted_items = sort_by_flammability(items)  # 3번: 정렬
+    # 시작 시 데이터 준비 (한 번만 읽기)
+    rows = read_csv(READ_FILE)
+    items = to_list(rows)
+    sorted_items = sort_by_flammability(items)
+    danger_items = filter_dangerous(sorted_items, DANGER_THRESHOLD)
 
-    print('\n=== 인화성 높은 순 정렬 결과 ===')
-    for item in sorted_items:
-        print(f'{item["Substance"]:<25} {item["Flammability"]}')
+    while True:
+        print_menu()
+        choice = input('번호를 선택하세요: ').strip()
 
-    danger_items = filter_dangerous(sorted_items, DANGER_THRESHOLD)  # 4번: 필터링
+        if choice == '1':
+            print('\n=== 1. 파일 원본 출력 ===')
+            print_table(rows)
 
-    print(f'\n=== 인화성 {DANGER_THRESHOLD} 이상 위험 물질 ===')
-    for item in danger_items:
-        print(f'{item["Substance"]:<25} {item["Flammability"]}')
+        elif choice == '2':
+            print('\n=== 2. 리스트 변환 결과 ===')
+            for item in items:
+                print(f'{item["Substance"]:<25} {item["Flammability"]}')
+
+        elif choice == '3':
+            print('\n=== 3. 인화성 높은 순 정렬 ===')
+            print_table(items_to_rows(sorted_items))
+
+        elif choice == '4':
+            print(f'\n=== 4. 인화성 {DANGER_THRESHOLD} 이상 위험 물질 ===')
+            print_table(items_to_rows(danger_items))
+
+        elif choice == '5':
+            print('\n=== 5. 위험 물질 CSV 저장 ===')
+            save_csv(danger_items, WRITE_FILE)
+
+        elif choice == '0':
+            print('종료합니다.')
+            break
+
+        else:
+            print('[안내] 0~5 사이 번호를 입력하세요.')
 
 
 if __name__ == '__main__':
