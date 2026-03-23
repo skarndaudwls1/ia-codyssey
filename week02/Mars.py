@@ -33,6 +33,8 @@ def read_csv(file_path):
 
 def print_table(rows):
     # 2차원 리스트를 TABLE처럼 정렬해서 출력한다.
+    # 출력 줄을 리스트에 모은 뒤 print() 한 번으로 출력한다.
+    # print() 호출 횟수를 줄여 시스템 콜 최소화.
     if not rows:
         print('[안내] 출력할 데이터가 없습니다.')
         return
@@ -46,18 +48,20 @@ def print_table(rows):
                 col_widths[i] = len(field)
 
     separator = '+' + '+'.join('-' * (w + 2) for w in col_widths) + '+'
-    print(separator)
 
+    # 출력할 줄을 리스트에 먼저 모두 조립
+    output_lines = [separator]
     for i, row in enumerate(rows):
         line_out = '| ' + ' | '.join(
             field.ljust(col_widths[j]) for j, field in enumerate(row)
         ) + ' |'
-        print(line_out)
-
+        output_lines.append(line_out)
         if i == 0:
-            print(separator)
+            output_lines.append(separator)
+    output_lines.append(separator)
 
-    print(separator)
+    # print() 한 번으로 전체 출력
+    print('\n'.join(output_lines))
 
 
 def to_list(rows):
@@ -151,10 +155,8 @@ def save_bin(items, file_path):
         with open(file_path, 'wb') as f:
             f.write(data)
 
-        # 저장 검증: 파일 크기 확인
-        with open(file_path, 'rb') as f:
-            f.seek(0, 2)          # 파일 끝으로 이동
-            file_size = f.tell()  # 현재 위치 = 파일 크기
+        # 저장 검증: 메모리의 data 크기로 바로 확인 (디스크 재접근 불필요)
+        file_size = len(data)
 
         if file_size > 0:
             print(f'[완료] 이진 파일 저장 성공: {file_path}')
@@ -278,6 +280,10 @@ def main():
     sorted_items = sort_by_flammability(items)
     danger_items = filter_dangerous(sorted_items, DANGER_THRESHOLD)
 
+    # 메뉴 선택마다 변환 반복을 막기 위해 한 번만 변환해서 메모리에 보관
+    sorted_rows = items_to_rows(sorted_items)
+    danger_rows = items_to_rows(danger_items)
+
     while True:
         print_menu()
         choice = input('번호를 선택하세요: ').strip()
@@ -296,11 +302,11 @@ def main():
 
         elif choice == '3':
             print('\n=== 3. 인화성 높은 순 정렬 ===')
-            print_table(items_to_rows(sorted_items))
+            print_table(sorted_rows)
 
         elif choice == '4':
             print(f'\n=== 4. 인화성 {DANGER_THRESHOLD} 이상 위험 물질 ===')
-            print_table(items_to_rows(danger_items))
+            print_table(danger_rows)
 
         elif choice == '5':
             print('\n=== 5. 위험 물질 CSV 저장 ===')
