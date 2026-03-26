@@ -132,7 +132,7 @@ def save_csv(items, file_path):
         print(f'[오류] 파일 쓰기 권한이 없습니다: {file_path}')
     except OSError as e:
         print(f'[오류] 파일 저장 실패: {e}')
-
+    
 
 def save_bin(items, file_path):
     # 정렬된 딕셔너리 리스트를 이진 파일로 저장하고 검증한다.
@@ -143,31 +143,20 @@ def save_bin(items, file_path):
         return False
 
     try:
-        # 딕셔너리 리스트 → 텍스트 → UTF-8 바이트로 변환
-        lines = []
-        for item in items:
-            pairs = [f'{k}={v}' for k, v in item.items()]
-            lines.append('|'.join(pairs))
-        data = '\n'.join(lines).encode('utf-8')
-
-        # 'wb': write binary — 이진 쓰기 모드
         with open(file_path, 'wb') as f:
-            f.write(data)
+            for item in items:
+                substance = item['Substance'].encode('utf-8')
+                flam      = item['Flammability']
+                int_part  = int(flam)
+                frac_part = int(round((flam - int_part) * 10000))
 
-        # 저장 검증: 메모리의 data 크기로 바로 확인 (디스크 재접근 불필요)
-        file_size = len(data)
+                f.write(substance.ljust(50, b'\x00'))  # 50바이트
+                f.write(int_part.to_bytes(2, 'big'))   # 2바이트
+                f.write(frac_part.to_bytes(2, 'big'))  # 2바이트
 
-        if file_size > 0:
-            print(f'[완료] 이진 파일 저장 성공: {file_path}')
-            print(f'[검증] 파일 크기: {file_size} bytes → 정상')
-            return True
-        else:
-            print(f'[오류] 파일이 비어 있습니다: {file_path}')
-            return False
+        print(f'[완료] 이진 파일 저장 성공: {file_path}')
+        return True
 
-    except PermissionError:
-        print(f'[오류] 파일 쓰기 권한이 없습니다: {file_path}')
-        return False
     except OSError as e:
         print(f'[오류] 파일 저장 실패: {e}')
         return False
