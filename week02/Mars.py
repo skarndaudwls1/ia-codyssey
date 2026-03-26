@@ -34,7 +34,6 @@ def read_csv(file_path):
 def print_table(rows):
     # 2차원 리스트를 TABLE처럼 정렬해서 출력한다.
     # 출력 줄을 리스트에 모은 뒤 print() 한 번으로 출력한다.
-    # print() 호출 횟수를 줄여 시스템 콜 최소화.
     if not rows:
         print('[안내] 출력할 데이터가 없습니다.')
         return
@@ -267,7 +266,7 @@ def print_menu():
     print()
     print('11. 정렬된 목록 이진 파일 저장')
     print('12. 이진 파일 읽어서 출력')
-    print('0.  종료')
+    print('x  종료')
     print('----------------------------')
 
 
@@ -323,7 +322,7 @@ def main():
             if bin_items:
                 print_table(items_to_rows(bin_items))
 
-        elif choice == '0':
+        elif choice == 'x':
             print('종료합니다.')
             break
 
