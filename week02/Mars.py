@@ -34,6 +34,7 @@ def read_csv(file_path):
 def print_table(rows):
     # 2차원 리스트를 TABLE처럼 정렬해서 출력한다.
     # 출력 줄을 리스트에 모은 뒤 print() 한 번으로 출력한다.
+    # print() 호출 횟수를 줄여 시스템 콜 최소화.
     if not rows:
         print('[안내] 출력할 데이터가 없습니다.')
         return
@@ -135,27 +136,56 @@ def save_csv(items, file_path):
 
 
 def save_bin(items, file_path):
-    # 정렬된 딕셔너리 리스트를 이진 파일로 저장하고 검증한다.
-    # 저장 형식 (한 줄 = 한 항목): key1=val1|key2=val2|key3=val3
-    # import 없이 Python 내장 encode() 만 사용.
+    # 정렬된 딕셔너리 리스트를 진짜 이진 파일로 저장하고 검증한다.
+    # import 없이 int.to_bytes(), float.hex() 만 사용.
+    #
+    # 저장 형식 (항목 하나):
+    #   [항목 수: 4바이트] 파일 맨 앞에 총 항목 수 기록
+    #   [필드 수: 4바이트] 항목 하나의 필드 수
+    #   [키 길이: 4바이트][키 바이트] 키 문자열
+    #   [값 타입: 1바이트] 0=문자열, 1=float
+    #   [값 길이: 4바이트][값 바이트] 또는 [float 8바이트]
     if not items:
         print('[안내] 저장할 데이터가 없습니다.')
         return False
 
     try:
-        # 딕셔너리 리스트 → 텍스트 → UTF-8 바이트로 변환
-        lines = []
+        buffer = bytearray()
+
+        # 총 항목 수를 파일 맨 앞 4바이트에 기록
+        buffer += len(items).to_bytes(4, byteorder='big')
+
         for item in items:
-            pairs = [f'{k}={v}' for k, v in item.items()]
-            lines.append('|'.join(pairs))
-        data = '\n'.join(lines).encode('utf-8')
+            # 필드 수 기록 (4바이트)
+            buffer += len(item).to_bytes(4, byteorder='big')
 
-        # 'wb': write binary — 이진 쓰기 모드
+            for key, val in item.items():
+                # 키: 길이(4바이트) + UTF-8 바이트
+                key_bytes = key.encode('utf-8')
+                buffer += len(key_bytes).to_bytes(4, byteorder='big')
+                buffer += key_bytes
+
+                # 값 타입 판별 후 저장
+                if isinstance(val, float):
+                    # float: 타입(1바이트=0x01) + hex 문자열 바이트(8바이트 고정)
+                    buffer += (1).to_bytes(1, byteorder='big')
+                    # float.hex()로 정밀도 손실 없이 변환 후 8바이트로 저장
+                    val_bytes = val.hex().encode('utf-8')
+                    buffer += len(val_bytes).to_bytes(4, byteorder='big')
+                    buffer += val_bytes
+                else:
+                    # 문자열: 타입(1바이트=0x00) + 길이(4바이트) + UTF-8 바이트
+                    buffer += (0).to_bytes(1, byteorder='big')
+                    val_bytes = str(val).encode('utf-8')
+                    buffer += len(val_bytes).to_bytes(4, byteorder='big')
+                    buffer += val_bytes
+
+        # 'wb': write binary
         with open(file_path, 'wb') as f:
-            f.write(data)
+            f.write(buffer)
 
-        # 저장 검증: 메모리의 data 크기로 바로 확인 (디스크 재접근 불필요)
-        file_size = len(data)
+        # 저장 검증: 메모리의 buffer 크기로 바로 확인
+        file_size = len(buffer)
 
         if file_size > 0:
             print(f'[완료] 이진 파일 저장 성공: {file_path}')
@@ -175,34 +205,47 @@ def save_bin(items, file_path):
 
 def load_bin(file_path):
     # 이진 파일을 읽어서 딕셔너리 리스트로 반환한다.
-    # UTF-8 바이트 → 텍스트 → 딕셔너리 리스트로 복원한다.
-    # import 없이 Python 내장 decode() 만 사용.
+    # import 없이 int.from_bytes(), float.fromhex() 만 사용.
     try:
-        # 'rb': read binary — 이진 읽기 모드
         with open(file_path, 'rb') as f:
-            data = f.read()
+            buffer = f.read()
 
-        # UTF-8 바이트 → 텍스트 → 딕셔너리 리스트 복원
+        pos = 0
+
+        def read_bytes(n):
+            # 현재 위치에서 n바이트 읽고 pos 이동
+            nonlocal pos
+            chunk = buffer[pos:pos + n]
+            pos += n
+            return chunk
+
+        # 총 항목 수 읽기 (4바이트)
+        item_count = int.from_bytes(read_bytes(4), byteorder='big')
         items = []
-        for line in data.decode('utf-8').split('\n'):
-            line = line.strip()
-            if not line:
-                continue
+
+        for _ in range(item_count):
+            # 필드 수 읽기 (4바이트)
+            field_count = int.from_bytes(read_bytes(4), byteorder='big')
             item = {}
-            for pair in line.split('|'):
-                parts = pair.split('=', 1)
-                if len(parts) == 2:
-                    key, val = parts
-                    # Flammability 만 float 으로 복원
-                    if key == 'Flammability':
-                        try:
-                            item[key] = float(val)
-                        except ValueError:
-                            item[key] = val
-                    else:
-                        item[key] = val
-            if item:
-                items.append(item)
+
+            for _ in range(field_count):
+                # 키 읽기
+                key_len = int.from_bytes(read_bytes(4), byteorder='big')
+                key = read_bytes(key_len).decode('utf-8')
+
+                # 값 타입 읽기 (1바이트)
+                val_type = int.from_bytes(read_bytes(1), byteorder='big')
+                val_len = int.from_bytes(read_bytes(4), byteorder='big')
+                val_bytes = read_bytes(val_len)
+
+                if val_type == 1:
+                    # float 복원
+                    item[key] = float.fromhex(val_bytes.decode('utf-8'))
+                else:
+                    # 문자열 복원
+                    item[key] = val_bytes.decode('utf-8')
+
+            items.append(item)
 
         print(f'[완료] 이진 파일 읽기 성공: {file_path} ({len(items)}개 항목)')
         return items
@@ -254,8 +297,10 @@ def verify_data(rows, items):
 
 def print_menu():
     # 메뉴를 출력한다.
+    title = '화성 기지 인화성 물질 분류'
+
     print('============================')
-    print('화성 기지 인화성 물질 분류')
+    print(f' {title}')
     print('============================')
     print('1.  파일 출력')
     print('2.  리스트 변환 후 출력')
@@ -266,7 +311,7 @@ def print_menu():
     print()
     print('11. 정렬된 목록 이진 파일 저장')
     print('12. 이진 파일 읽어서 출력')
-    print('x  종료')
+    print('0.  종료')
     print('----------------------------')
 
 
@@ -322,7 +367,7 @@ def main():
             if bin_items:
                 print_table(items_to_rows(bin_items))
 
-        elif choice == 'x':
+        elif choice == '0':
             print('종료합니다.')
             break
 
