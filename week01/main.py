@@ -4,9 +4,12 @@ ERROR_LOG_FILE = 'error_log.txt'
 try:
     with open(LOG_FILE, 'r') as log_file:
         line = log_file.readlines()
+        print(line)
         header = line[0]
         log_data = line[1:]
+        print(log_data)
         log_data.reverse()
+        
 
         print(header, end='')
         for line in log_data:
