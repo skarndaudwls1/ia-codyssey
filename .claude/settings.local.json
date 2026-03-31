@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python mars_mission_computer.py)",
+      "Bash(python3 mars_mission_computer.py)"
+    ]
+  }
+}
