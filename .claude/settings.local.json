@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python mars_mission_computer.py)",
-      "Bash(python3 mars_mission_computer.py)"
+      "Bash(python3 mars_mission_computer.py)",
+      "Bash(wsl -e bash -c \"find ~/ia-codyssey/week01 ~/ia-codyssey/week02 ~/ia-codyssey/week03 -type f | sort\")"
     ]
   }
 }
