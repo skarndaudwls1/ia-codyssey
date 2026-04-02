@@ -131,7 +131,14 @@ def _write_table(data_rows):
 
 class DummySensor:
     def __init__(self):
-        self.env_values = {key: 0 for key in ENV_CONFIG}
+        self.env_values = {
+            'mars_base_internal_temperature': 0,
+            'mars_base_external_temperature': 0,
+            'mars_base_internal_humidity':    0,
+            'mars_base_external_illuminance': 0,
+            'mars_base_internal_co2':         0,
+            'mars_base_internal_oxygen':      0,
+        }
         self._env_set = False
 
     def set_env(self):
