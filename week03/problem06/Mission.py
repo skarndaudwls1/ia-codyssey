@@ -1,7 +1,7 @@
 # Mission.py
 # 화성 기지 미션 컴퓨터 - 환경 센서 메뉴
 
-from DummySensor import DummySensor
+from DummySensor import DummySensor, has_log_data
 
 ds = DummySensor()
 
@@ -17,38 +17,6 @@ def print_env(env):
     print(f'  기지 내부 산소 농도  : {env["mars_base_internal_oxygen"]} %')
 
 
-def print_log_table():
-    # sensor.log를 읽어 표 형식으로 출력한다.
-    log_file = 'sensor.log'
-    try:
-        with open(log_file, 'r', encoding='utf-8') as f:
-            lines = [line.strip() for line in f if line.strip()]
-    except FileNotFoundError:
-        print('[안내] 아직 기록된 로그가 없습니다.')
-        return
-
-    if not lines:
-        print('[안내] 아직 기록된 로그가 없습니다.')
-        return
-
-    rows = [line.split(',') for line in lines]
-
-    # 열별 최대 너비 계산
-    col_widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
-
-    sep = '+' + '+'.join('-' * (w + 2) for w in col_widths) + '+'
-
-    print('\n=== 환경 센서 로그 ===')
-    print(sep)
-    for idx, row in enumerate(rows):
-        cells = ' | '.join(cell.ljust(col_widths[i]) for i, cell in enumerate(row))
-        print(f'| {cells} |')
-        if idx == 0:
-            print(sep)
-    print(sep)
-    print(f'총 {len(rows) - 1}건')
-
-
 def print_menu():
     print('\n============================')
     print('   화성 기지 미션 컴퓨터')
@@ -60,7 +28,9 @@ def print_menu():
 
 
 def main():
-    last_env = None
+    last_env = ds.load_last_env()
+    if last_env:
+        print('[안내] 이전 마지막 센서 값을 불러왔습니다.')
 
     while True:
         print_menu()
@@ -74,8 +44,12 @@ def main():
 
         elif choice == '2':
             if last_env is None:
-                print('[안내] 아직 센서를 읽지 않았습니다. 먼저 1번을 선택하세요.')
-            else:
+                if has_log_data():
+                    # 로그에 데이터는 있으나 값이 잘못된 경우 오류 원인을 출력한다.
+                    last_env = ds.load_last_env()
+                else:
+                    print('[안내] 아직 센서를 읽지 않았습니다. 먼저 1번을 선택하세요.')
+            if last_env is not None:
                 print_env(last_env)
 
         elif choice == '0':

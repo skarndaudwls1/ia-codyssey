@@ -9,28 +9,18 @@ RTC_DATE_FILE = '/sys/class/rtc/rtc0/date'
 UTC_OFFSET = 9  # KST = UTC+9
 
 # 센서 항목 추가/수정은 이 딕셔너리 한 곳만 변경하면 된다.
-# 형식: 키: (최솟값, 최댓값, 소수점 자리수)
+# 형식: 키: (레이블, 최솟값, 최댓값, 소수점 자리수)
 # 소수점 자리수가 0이면 정수로 생성한다.
-ENV_RANGES = {
-    'mars_base_internal_temperature': (18,   30,   0),
-    'mars_base_external_temperature': (0,    21,   0),
-    'mars_base_internal_humidity':    (50,   60,   0),
-    'mars_base_external_illuminance': (500,  715,  0),
-    'mars_base_internal_co2':         (0.02, 0.1,  4),
-    'mars_base_internal_oxygen':      (4,    7,    0),
+ENV_CONFIG = {
+    'mars_base_internal_temperature': ('내부온도(°C)',   18,   30,   0),
+    'mars_base_external_temperature': ('외부온도(°C)',   0,    21,   0),
+    'mars_base_internal_humidity':    ('내부습도(%)',    50,   60,   0),
+    'mars_base_external_illuminance': ('외부광량(W/m²)', 500,  715,  0),
+    'mars_base_internal_co2':         ('CO2(%)',        0.02, 0.1,  4),
+    'mars_base_internal_oxygen':      ('산소농도(%)',    4,    7,    0),
 }
 
-# 헤더 레이블도 ENV_RANGES 키 순서에 맞게 정의한다.
-HEADER_LABELS = {
-    'mars_base_internal_temperature': '내부온도(°C)',
-    'mars_base_external_temperature': '외부온도(°C)',
-    'mars_base_internal_humidity':    '내부습도(%)',
-    'mars_base_external_illuminance': '외부광량(W/m²)',
-    'mars_base_internal_co2':         'CO2(%)',
-    'mars_base_internal_oxygen':      '산소농도(%)',
-}
-
-HEADER = ['날짜/시간'] + [HEADER_LABELS[k] for k in ENV_RANGES]
+HEADER = ['날짜/시간'] + [v[0] for v in ENV_CONFIG.values()]
 
 
 def _days_in_month(year, month):
@@ -98,7 +88,7 @@ def _read_data_rows():
                     continue
                 try:
                     cells = [c.strip() for c in line.strip('|').split('|')]
-                    if cells and cells[0] != HEADER[0]:
+                    if cells and cells[0] != HEADER[0] and len(cells) == len(HEADER):
                         data_rows.append(cells)
                 except (IndexError, ValueError):
                     # 손상된 행은 건너뛴다.
@@ -108,6 +98,11 @@ def _read_data_rows():
     except (OSError, UnicodeDecodeError) as e:
         print(f'[오류] 로그 파일 읽기 실패: {e}')
     return data_rows
+
+
+def has_log_data():
+    # 로그 파일에 유효한 데이터 행이 있으면 True를 반환한다.
+    return bool(_read_data_rows())
 
 
 def _write_table(data_rows):
@@ -136,24 +131,48 @@ def _write_table(data_rows):
 
 class DummySensor:
     def __init__(self):
-        self.env_values = {key: 0 for key in ENV_RANGES}
+        self.env_values = {key: 0 for key in ENV_CONFIG}
+        self._env_set = False
 
     def set_env(self):
-        # ENV_RANGES 기준으로 각 항목에 랜덤 값을 생성해 채운다.
+        # ENV_CONFIG 기준으로 각 항목에 랜덤 값을 생성해 채운다.
         # 소수점 자리수가 0이면 정수, 그 외에는 지정 자릿수의 실수로 생성한다.
-        for key, (lo, hi, digits) in ENV_RANGES.items():
+        for key, (label, lo, hi, digits) in ENV_CONFIG.items():
             if digits == 0:
                 self.env_values[key] = random.randint(int(lo), int(hi))
             else:
                 self.env_values[key] = round(random.uniform(lo, hi), digits)
+        self._env_set = True
 
     def get_env(self):
         # 보너스: 환경 값을 표 형식으로 로그 파일에 누적 기록한다.
-        new_row = [get_current_time()] + [str(self.env_values[k]) for k in ENV_RANGES]
+        if not self._env_set:
+            print('[경고] set_env()를 먼저 호출하지 않았습니다. 초깃값(0)이 기록됩니다.')
+        new_row = [get_current_time()] + [str(self.env_values[k]) for k in ENV_CONFIG]
         data_rows = _read_data_rows()
         data_rows.append(new_row)
         _write_table(data_rows)
         return self.env_values
+
+    def load_last_env(self):
+        # sensor.log의 마지막 행을 읽어 env_values 형식으로 반환한다.
+        data_rows = _read_data_rows()
+        if not data_rows:
+            return None
+        last_row = data_rows[-1]
+        keys = list(self.env_values.keys())
+        if len(last_row) != len(HEADER):
+            print('[오류] 마지막 행의 열 수가 올바르지 않습니다.')
+            return None
+        env = {}
+        for i, key in enumerate(keys):
+            val = last_row[i + 1]
+            try:
+                env[key] = int(val) if '.' not in val else float(val)
+            except ValueError:
+                print(f'[오류] [{HEADER[i + 1]}] 항목의 값이 올바르지 않습니다: "{val}"')
+                return None
+        return env
 
 
 if __name__ == '__main__':
