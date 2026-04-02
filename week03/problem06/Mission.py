@@ -1,7 +1,7 @@
 # Mission.py
 # 화성 기지 미션 컴퓨터 - 환경 센서 메뉴
 
-from DummySensor import DummySensor, has_log_data
+from mars_mission_computer import DummySensor, has_log_data
 
 ds = DummySensor()
 
