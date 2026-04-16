@@ -269,30 +269,29 @@ class MissionComputer:
                 time.sleep(1)
         except KeyboardInterrupt:
             self._running = False
-        thread.join(timeout=6)
+        thread.join(timeout=1)
         print('\nSystem stopped....')
 
     # ── public: 시스템 정보 ──────────────────────────────────────────
 
     def get_mission_computer_info(self):
-        # 보너스: getattr() 로 setting.txt 에 따라 활성화된 항목만 출력.
-        settings = SystemInfo._load_settings()
-        info = {}
-        for method_name, label in SystemInfo.INFO_LABELS.items():
-            if settings.get(method_name, True):
-                info[label] = getattr(SystemInfo, method_name)()
-        print(_to_json(info))
+        print(_to_json(self._collect(SystemInfo.INFO_LABELS)))
 
     # ── public: 시스템 부하 ──────────────────────────────────────────
 
     def get_mission_computer_load(self):
-        # 보너스: getattr() 로 setting.txt 에 따라 활성화된 항목만 출력.
+        print(_to_json(self._collect(SystemInfo.LOAD_LABELS)))
+
+    # ── private: 활성화된 항목만 수집하는 공통 헬퍼 ──────────────────
+
+    def _collect(self, labels):
+        # setting.txt 설정에 따라 활성화된 항목만 getattr() 로 호출해 반환한다.
         settings = SystemInfo._load_settings()
-        load = {}
-        for method_name, label in SystemInfo.LOAD_LABELS.items():
-            if settings.get(method_name, True):
-                load[label] = getattr(SystemInfo, method_name)()
-        print(_to_json(load))
+        return {
+            label: getattr(SystemInfo, method_name)()
+            for method_name, label in labels.items()
+            if settings.get(method_name, True)
+        }
 
     # ── private: 센서 루프 (daemon thread 에서 실행) ──────────────────
 
@@ -304,11 +303,17 @@ class MissionComputer:
             for key in self.env_values:
                 self.env_values[key] = sensor[key]
             self._history.append(dict(self.env_values))
+            if len(self._history) > MissionComputer.AVG_INTERVAL:
+                del self._history[:-MissionComputer.AVG_INTERVAL]
             count += 1
             if count % MissionComputer.AVG_INTERVAL == 0:
                 self._avg = self._calc_avg()
             self._render_sensor_screen()
-            time.sleep(5)
+            # 0.1초 단위로 쪼개 sleep — Ctrl+C 후 빠르게 반응한다.
+            for _ in range(50):
+                if not self._running:
+                    break
+                time.sleep(0.1)
 
     def _calc_avg(self):
         # private: 최근 AVG_INTERVAL 개 데이터의 항목별 평균을 계산한다.
