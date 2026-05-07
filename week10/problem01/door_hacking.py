@@ -268,34 +268,73 @@ def _run_parallel(worker_fn, worker_extra_args, banner_lines):
 # ---------------------------------------------------------------------------
 def _worker(start_index, end_index, zip_path, target_name,
             result_queue, progress_counter, counter_lock, stop_event):
-    '''zipfile.read 로 매 후보를 시도하는 워커.'''
+    '''zipfile.read 로 매 후보를 시도하는 워커.
+
+    최적화:
+    - 매 후보마다 문자열 할당/encode 대신 bytearray 를 in-place 로 갱신 (36진수 카운터).
+    - 핫 루프에서 메서드/상수 조회를 지역 변수로 호이스팅.
+    - except 를 좁혀 헤더 불일치(RuntimeError) 의 빠른 경로 확보.
+    - flush 주기 상향으로 lock 경합 감소.
+    '''
     try:
         zip_file = zipfile.ZipFile(zip_path)
     except (OSError, zipfile.BadZipFile):
         return
 
+    cb = CHARSET_BYTES
+    base = len(cb)
+    pwd_len = PASSWORD_LENGTH
+    cb0 = cb[0]
+    read = zip_file.read
+    set_stop = stop_event.set
+    is_stopped = stop_event.is_set
+
+    # start_index → digits / pw_buf 초기화 (36진수 카운터)
+    digits = [0] * pwd_len
+    n = start_index
+    for position in range(pwd_len - 1, -1, -1):
+        digits[position] = n % base
+        n //= base
+    pw_buf = bytearray(pwd_len)
+    for p in range(pwd_len):
+        pw_buf[p] = cb[digits[p]]
+
     local_attempts = 0
-    flush = PROGRESS_FLUSH_INTERVAL
+    flush = 50000  # PROGRESS_FLUSH_INTERVAL 보다 크게 잡아 lock 경합 최소화
+    remaining = end_index - start_index
 
     try:
-        for index in range(start_index, end_index):
-            password = _index_to_password(index)
+        while remaining > 0:
             try:
-                zip_file.read(target_name, pwd=password.encode('ascii'))
+                read(target_name, pwd=bytes(pw_buf))
                 with counter_lock:
                     progress_counter.value += local_attempts + 1
-                result_queue.put(password)
-                stop_event.set()
+                result_queue.put(pw_buf.decode('ascii'))
+                set_stop()
                 return
+            except RuntimeError:
+                pass  # 헤더 불일치 (대부분의 경로)
             except Exception:
-                pass
+                pass  # zlib.error / BadZipFile 등 본문 검증 실패
 
+            # digits +1 (자리올림) 과 pw_buf 동기 갱신
+            position = pwd_len - 1
+            while position >= 0 and digits[position] + 1 >= base:
+                digits[position] = 0
+                pw_buf[position] = cb0
+                position -= 1
+            if position < 0:
+                break  # 워커 구간 끝
+            digits[position] += 1
+            pw_buf[position] = cb[digits[position]]
+
+            remaining -= 1
             local_attempts += 1
             if local_attempts >= flush:
                 with counter_lock:
                     progress_counter.value += local_attempts
                 local_attempts = 0
-                if stop_event.is_set():
+                if is_stopped():
                     return
     except KeyboardInterrupt:
         pass

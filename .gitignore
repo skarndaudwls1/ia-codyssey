@@ -2,3 +2,9 @@ __pycache__/
 *.pyc
 .claude/
 CLAUDE.md
+
+# Windows NTFS Alternate Data Streams (zone identifier 등)
+*:Zone.Identifier
+*:RVContext
+*Zone.Identifier
+*RVContext
