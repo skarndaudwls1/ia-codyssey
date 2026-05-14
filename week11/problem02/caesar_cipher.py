@@ -79,18 +79,15 @@ def _shift_char(character, shift):
     '''
     if 'a' <= character <= 'z':
         base = ord('a')
-        return chr((ord(character) - base - shift) % ALPHABET_SIZE + base)
-    if 'A' <= character <= 'Z':
+    elif 'A' <= character <= 'Z':
         base = ord('A')
-        return chr((ord(character) - base - shift) % ALPHABET_SIZE + base)
-    return character
+    else:
+        return character
+    return chr((ord(character) - base - shift) % ALPHABET_SIZE + base)
 
 
 def _shift_text(target_text, shift):
-    result_chars = []
-    for character in target_text:
-        result_chars.append(_shift_char(character, shift))
-    return ''.join(result_chars)
+    return ''.join(_shift_char(c, shift) for c in target_text)
 
 
 def _contains_dictionary_word(decoded_text):
@@ -218,10 +215,11 @@ def caesar_cipher_decode(target_text):
             if suggested_shift is None:
                 matched_word = _contains_dictionary_word(decoded)
 
+            print('  [{0:>2}]  {1}'.format(shift, decoded))
+            last_shown_shift = shift
+
             if matched_word is not None:
-                print('  [{0:>2}]  {1}'.format(shift, decoded))
                 print("         << 사전 단어 '{0}' 발견".format(matched_word))
-                last_shown_shift = shift
                 suggested_shift = shift
 
                 action = _ask_action(suggested_shift, last_shown_shift,
@@ -233,8 +231,6 @@ def caesar_cipher_decode(target_text):
                     continue
                 return action
 
-            print('  [{0:>2}]  {1}'.format(shift, decoded))
-            last_shown_shift = shift
             if shift < MAX_SHIFT:
                 _visual_delay()
             shift += 1
