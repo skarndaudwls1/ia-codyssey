@@ -7,3 +7,7 @@
 (week01/problem05) 문제5 화성 기지의 취약점을 찾아서 보강하자
 (week01/problem06) 문제6 미션 컴퓨터 리턴즈
 (week01/problem07) 문제7 살아난 미션 컴퓨터
+(week04/problem08) 문제8 불안정한 미션 컴퓨터
+(week10/problem01) 문제1 비밀번호를 찾아라
+(week11/problem02) 문제2 카이사르 암호를 풀어라
+
