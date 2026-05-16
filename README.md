@@ -10,4 +10,5 @@
 (week04/problem08) 문제8 불안정한 미션 컴퓨터
 (week10/problem01) 문제1 비밀번호를 찾아라
 (week11/problem02) 문제2 카이사르 암호를 풀어라
+(week12/problem07) 문제7 음성을 녹음해 보자
 
