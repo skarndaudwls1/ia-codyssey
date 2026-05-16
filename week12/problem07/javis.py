@@ -104,6 +104,32 @@ def _ask(prompt):
 
 
 # ---------------------------------------------------------------------------
+# 네이티브 stderr 잠금 (녹음 백엔드 보조)
+# ---------------------------------------------------------------------------
+class NativeStderrSilencer:
+    '''ALSA/JACK 같은 C 라이브러리가 표준 라이브러리를 거치지 않고
+    파일 디스크립터 2(stderr) 로 직접 쏟아내는 진단 메시지를 잠시
+    /dev/null 로 돌린다.
+
+    파이썬 계층의 예외/경고는 건드리지 않으므로 오류 처리에는 영향이
+    없다. 녹음 백엔드 초기화 시에만 with 문으로 사용하며, 제약상
+    외부 라이브러리가 아닌 표준 os 모듈만 쓴다.
+    '''
+
+    def __enter__(self):
+        self._saved_stderr_fd = os.dup(2)
+        self._devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(self._devnull_fd, 2)
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        os.dup2(self._saved_stderr_fd, 2)
+        os.close(self._devnull_fd)
+        os.close(self._saved_stderr_fd)
+        return False
+
+
+# ---------------------------------------------------------------------------
 # 녹음 백엔드
 # ---------------------------------------------------------------------------
 class SoundDeviceRecorder:
@@ -117,9 +143,11 @@ class SoundDeviceRecorder:
     def list_microphones(self):
         '''입력 채널이 있는 장치를 (번호, 이름) 목록으로 돌려준다.'''
         microphones = []
-        for index, device in enumerate(_sd.query_devices()):
-            if device.get('max_input_channels', 0) > 0:
-                microphones.append((index, device.get('name', '알 수 없음')))
+        with NativeStderrSilencer():
+            for index, device in enumerate(_sd.query_devices()):
+                if device.get('max_input_channels', 0) > 0:
+                    microphones.append(
+                        (index, device.get('name', '알 수 없음')))
         return microphones
 
     def record_until_event(self, stop_event):
@@ -131,11 +159,12 @@ class SoundDeviceRecorder:
             # 들어온 블록만 복사해 모은다.
             self._frames.append(indata.copy())
 
-        with _sd.InputStream(samplerate=SAMPLE_RATE,
-                             channels=CHANNELS,
-                             dtype='int16',
-                             callback=_callback):
-            stop_event.wait()
+        with NativeStderrSilencer():
+            with _sd.InputStream(samplerate=SAMPLE_RATE,
+                                 channels=CHANNELS,
+                                 dtype='int16',
+                                 callback=_callback):
+                stop_event.wait()
 
         if not self._frames:
             return b''
@@ -149,35 +178,38 @@ class PyAudioRecorder:
 
     def list_microphones(self):
         microphones = []
-        audio = _pyaudio.PyAudio()
-        try:
-            for index in range(audio.get_device_count()):
-                info = audio.get_device_info_by_index(index)
-                if int(info.get('maxInputChannels', 0)) > 0:
-                    microphones.append(
-                        (index, info.get('name', '알 수 없음')))
-        finally:
-            audio.terminate()
+        with NativeStderrSilencer():
+            audio = _pyaudio.PyAudio()
+            try:
+                for index in range(audio.get_device_count()):
+                    info = audio.get_device_info_by_index(index)
+                    if int(info.get('maxInputChannels', 0)) > 0:
+                        microphones.append(
+                            (index, info.get('name', '알 수 없음')))
+            finally:
+                audio.terminate()
         return microphones
 
     def record_until_event(self, stop_event):
-        audio = _pyaudio.PyAudio()
-        stream = None
         frames = []
-        try:
-            stream = audio.open(format=_pyaudio.paInt16,
-                                channels=CHANNELS,
-                                rate=SAMPLE_RATE,
-                                input=True,
-                                frames_per_buffer=CHUNK_SIZE)
-            while not stop_event.is_set():
-                frames.append(
-                    stream.read(CHUNK_SIZE, exception_on_overflow=False))
-        finally:
-            if stream is not None:
-                stream.stop_stream()
-                stream.close()
-            audio.terminate()
+        with NativeStderrSilencer():
+            audio = _pyaudio.PyAudio()
+            stream = None
+            try:
+                stream = audio.open(format=_pyaudio.paInt16,
+                                    channels=CHANNELS,
+                                    rate=SAMPLE_RATE,
+                                    input=True,
+                                    frames_per_buffer=CHUNK_SIZE)
+                while not stop_event.is_set():
+                    frames.append(
+                        stream.read(CHUNK_SIZE,
+                                    exception_on_overflow=False))
+            finally:
+                if stream is not None:
+                    stream.stop_stream()
+                    stream.close()
+                audio.terminate()
         return b''.join(frames)
 
 
