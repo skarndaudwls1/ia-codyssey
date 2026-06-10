@@ -3,6 +3,9 @@ __pycache__/
 .claude/
 CLAUDE.md
 
+# IDE 설정 폴더 (JetBrains 등)
+.idea/
+
 # javis 가 런타임에 만드는 녹음 파일 폴더
 records/
 
