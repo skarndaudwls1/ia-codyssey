@@ -116,20 +116,18 @@ class MySQLHelper:
             cursor.close()
 
     def execute_many(self, query, params_list):
-        '''같은 쿼리를 매개변수만 바꿔 반복 실행하고 마지막에 한 번만
-        커밋한다. 행마다 커밋하지 않으므로 대량 입력이 빠르다.
+        '''같은 쿼리를 여러 행에 한꺼번에 실행하고 마지막에 한 번만
+        커밋한다. 드라이버가 제공하는 executemany 를 쓰므로 한 줄씩
+        보내는 것보다 빠르다.
 
-        실행한 횟수를 돌려준다.
+        반영된 행 수를 돌려준다.
         '''
         connection = self.connect()
         cursor = connection.cursor()
-        count = 0
         try:
-            for params in params_list:
-                cursor.execute(query, params)
-                count += 1
+            cursor.executemany(query, list(params_list))
             connection.commit()
-            return count
+            return cursor.rowcount
         finally:
             cursor.close()
 
@@ -177,11 +175,14 @@ def read_csv_file(path):
     rows = []
     for line in lines[1:]:
         fields = line.split(',')
-        # weather_id, mars_date, temp, stom 순서로 들어 있다.
-        mars_date = fields[1]
-        temp = float(fields[2])
-        storm = int(fields[3])
-        rows.append((mars_date, temp, storm))
+        # 컬럼은 weather_id, mars_date, temp, stom 순서다. 숫자 인덱스 대신
+        # 이름으로 풀어 두면 어떤 값을 쓰는지 한눈에 보인다. weather_id 는
+        # 테이블에서 자동 증가하므로 읽기만 하고 버린다(_ 로 표시).
+        if len(fields) != 4:
+            print('형식이 맞지 않아 건너뜁니다:', line)
+            continue
+        _weather_id, mars_date, temp, storm = fields
+        rows.append((mars_date, float(temp), int(storm)))
     return header, rows
 
 
@@ -272,25 +273,33 @@ def run_with_db(action):
         print('데이터베이스 작업 실패:', error)
 
 
+def read_csv_or_warn():
+    '''CSV 파일을 읽어 (헤더, 행목록) 을 돌려준다.
+
+    파일이 없으면 안내 메시지를 출력하고 (None, None) 을 돌려준다.
+    파일 존재 확인 코드가 메뉴 곳곳에 중복되지 않도록 한 곳에 모았다.
+    '''
+    if not os.path.exists(CSV_PATH):
+        print('CSV 파일을 찾을 수 없습니다:', CSV_PATH)
+        return None, None
+    return read_csv_file(CSV_PATH)
+
+
 def main():
     while True:
         print_menu()
         choice = input('선택> ').strip()
 
         if choice == '1':
-            if not os.path.exists(CSV_PATH):
-                print('CSV 파일을 찾을 수 없습니다:', CSV_PATH)
-                continue
-            header, rows = read_csv_file(CSV_PATH)
-            print_csv_content(header, rows)
+            header, rows = read_csv_or_warn()
+            if header is not None:
+                print_csv_content(header, rows)
         elif choice == '2':
             run_with_db(create_table)
         elif choice == '3':
-            if not os.path.exists(CSV_PATH):
-                print('CSV 파일을 찾을 수 없습니다:', CSV_PATH)
-                continue
-            _, rows = read_csv_file(CSV_PATH)
-            run_with_db(lambda db: insert_weathers(db, rows))
+            _, rows = read_csv_or_warn()
+            if rows:
+                run_with_db(lambda db: insert_weathers(db, rows))
         elif choice == '4':
             run_with_db(show_table)
         elif choice == '0':
