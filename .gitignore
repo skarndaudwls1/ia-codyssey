@@ -9,6 +9,9 @@ CLAUDE.md
 # javis 가 런타임에 만드는 녹음 파일 폴더
 records/
 
+# DB 접속 정보 등 민감 정보 (키 목록은 .env.example 참고)
+.env
+
 # Windows NTFS Alternate Data Streams (zone identifier 등)
 *:Zone.Identifier
 *:RVContext

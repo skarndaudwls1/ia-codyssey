@@ -21,7 +21,16 @@ CSV 컬럼 안내
   mars_date, temp, storm 세 컬럼만 입력한다.
 
 실행은 본 파일이 있는 폴더에서 한다.
-접속 정보는 아래 상수에서 직접 고치거나 환경 변수로 덮어쓸 수 있다.
+접속 정보(특히 비밀번호)는 코드에 박지 않고 같은 폴더의 .env 파일이나
+환경 변수로 받는다. .env 는 깃에 올리지 않으며(.gitignore), 키 목록은
+.env.example 을 참고한다.
+
+    # .env 예시
+    MYSQL_HOST=127.0.0.1
+    MYSQL_PORT=3306
+    MYSQL_USER=mars
+    MYSQL_PASSWORD=mars1234
+    MYSQL_DATABASE=mars_db
 '''
 
 import os
@@ -50,15 +59,40 @@ except ImportError:
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_FILENAME = 'mars_weathers_data.CSV'
 CSV_PATH = os.path.join(APP_DIR, CSV_FILENAME)
+ENV_PATH = os.path.join(APP_DIR, '.env')
 
 TABLE_NAME = 'mars_weather'
 
-# 접속 정보. 필요하면 값을 직접 고치거나 환경 변수로 덮어쓴다.
+
+def load_env(path):
+    '''.env 파일을 한 줄씩 직접 읽어 환경 변수로 올린다.
+
+    외부 라이브러리(python-dotenv)를 쓰지 않고 내장 기능만 사용한다.
+    'KEY=VALUE' 형식만 처리하고, 빈 줄과 '#' 주석 줄은 건너뛴다.
+    이미 셸에서 지정한 환경 변수는 setdefault 로 덮어쓰지 않는다.
+    '''
+    if not os.path.exists(path):
+        return
+    with open(path, 'r', encoding='utf-8') as env_file:
+        for line in env_file:
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, value = line.split('=', 1)
+            os.environ.setdefault(key.strip(), value.strip())
+
+
+# DB_CONFIG 를 만들기 전에 .env 를 먼저 읽어 둔다. 비밀번호 같은 민감 정보는
+# 코드에 박지 않고 .env(깃 추적 제외) 또는 셸 환경 변수로만 받는다.
+load_env(ENV_PATH)
+
+# 접속 정보. 민감하지 않은 값만 기본값을 두고, 비밀번호는 기본값을 비워
+# .env 나 환경 변수로 반드시 받도록 한다.
 DB_CONFIG = {
     'host': os.environ.get('MYSQL_HOST', '127.0.0.1'),
     'port': int(os.environ.get('MYSQL_PORT', '3306')),
     'user': os.environ.get('MYSQL_USER', 'mars'),
-    'password': os.environ.get('MYSQL_PASSWORD', 'mars1234'),
+    'password': os.environ.get('MYSQL_PASSWORD', ''),
     'database': os.environ.get('MYSQL_DATABASE', 'mars_db'),
 }
 
@@ -264,6 +298,10 @@ def run_with_db(action):
     if _driver is None:
         print('MySQL 드라이버가 없습니다. '
               'pymysql 또는 mysql-connector-python 을 설치하세요.')
+        return
+    if not DB_CONFIG['password']:
+        print('DB 비밀번호가 비어 있습니다. '
+              '.env 파일이나 환경 변수에 MYSQL_PASSWORD 를 지정하세요.')
         return
     try:
         with MySQLHelper(**DB_CONFIG) as db:
