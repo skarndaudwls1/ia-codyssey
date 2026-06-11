@@ -16,4 +16,95 @@
 
 # 보너스 과제
 MySQLHelper 클래스를 만들어서 데이터베이스 연결 및 쿼리 등을 쉽게 할 수 있게 구성한다.
-<img width="198" height="116" alt="image" src="https://github.com/user-attachments/assets/315ace71-e109-4443-8d31-dfbd8fa6ba7c" />
+# ---------------------------------------------------------------------------
+# 보너스: MySQLHelper 클래스
+# ---------------------------------------------------------------------------
+class MySQLHelper:
+    '''MySQL 연결과 쿼리 실행을 간단히 다루기 위한 도우미.
+
+    with 문과 함께 쓰면 블록을 빠져나갈 때 연결이 자동으로 닫힌다.
+
+        with MySQLHelper(**DB_CONFIG) as db:
+            db.execute('...')
+    '''
+
+    def __init__(self, host, port, user, password, database):
+        if _driver is None:
+            raise RuntimeError(
+                'MySQL 드라이버가 없습니다. '
+                'pymysql 또는 mysql-connector-python 을 설치하세요.'
+            )
+        self._host = host
+        self._port = port
+        self._user = user
+        self._password = password
+        self._database = database
+        self._connection = None
+
+    def connect(self):
+        '''데이터베이스에 연결한다. 이미 연결돼 있으면 그대로 둔다.'''
+        if self._connection is not None:
+            return self._connection
+        self._connection = _driver.connect(
+            host=self._host,
+            port=self._port,
+            user=self._user,
+            password=self._password,
+            database=self._database,
+        )
+        return self._connection
+
+    def execute(self, query, params=None):
+        '''INSERT / UPDATE / DELETE / DDL 류 쿼리를 실행하고 커밋한다.
+
+        반영된 행 수를 돌려준다.
+        '''
+        connection = self.connect()
+        cursor = connection.cursor()
+        try:
+            cursor.execute(query, params or ())
+            connection.commit()
+            return cursor.rowcount
+        finally:
+            cursor.close()
+
+    def execute_many(self, query, params_list):
+        '''같은 쿼리를 여러 행에 한꺼번에 실행하고 마지막에 한 번만
+        커밋한다. 드라이버가 제공하는 executemany 를 쓰므로 한 줄씩
+        보내는 것보다 빠르다.
+
+        반영된 행 수를 돌려준다.
+        '''
+        connection = self.connect()
+        cursor = connection.cursor()
+        try:
+            # params_list 는 이미 리스트로 들어오므로 따로 복사하지 않는다.
+            cursor.executemany(query, params_list)
+            connection.commit()
+            return cursor.rowcount
+        finally:
+            cursor.close()
+
+    def fetch_all(self, query, params=None):
+        '''SELECT 쿼리를 실행하고 모든 행을 리스트로 돌려준다.'''
+        connection = self.connect()
+        cursor = connection.cursor()
+        try:
+            cursor.execute(query, params or ())
+            return cursor.fetchall()
+        finally:
+            cursor.close()
+
+    def close(self):
+        '''연결을 닫는다.'''
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
+
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+        return False
