@@ -37,18 +37,34 @@
 > MySQL 연결 부분에 한해 외부 라이브러리 사용이 허용된다. 그 외 CSV
 > 파싱 등은 파이썬 기본 기능만 사용한다.
 
-## 접속 정보 설정
+## 접속 정보 설정 (`.env`)
 
-`mars_weather_summary.py` 상단의 `DB_CONFIG` 값을 직접 고치거나, 환경
-변수로 덮어쓸 수 있다.
+접속 정보는 코드에 박지 않고, 같은 폴더의 `.env` 파일(또는 셸 환경
+변수)에서 읽는다. `.env` 는 민감 정보이므로 깃에 올리지 않는다
+(`.gitignore` 에 등록됨). 실행 전에 같은 폴더에 `.env` 를 만들고 아래
+키를 채운다.
 
-| 환경 변수 | 기본값 |
-|-----------|--------|
-| `MYSQL_HOST` | `localhost` |
-| `MYSQL_PORT` | `3306` |
-| `MYSQL_USER` | `root` |
-| `MYSQL_PASSWORD` | (빈 문자열) |
-| `MYSQL_DATABASE` | `mars_db` |
+```
+# week15/problem05/.env
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=mars
+MYSQL_PASSWORD=mars1234
+MYSQL_DATABASE=mars_db
+```
+
+| 키 | 설명 |
+|-----|------|
+| `MYSQL_HOST` | DB 서버 주소 |
+| `MYSQL_PORT` | DB 포트 |
+| `MYSQL_USER` | 접속 계정 |
+| `MYSQL_PASSWORD` | 접속 비밀번호 |
+| `MYSQL_DATABASE` | 사용할 데이터베이스 이름 |
+
+> 우선순위는 **셸 환경 변수 > `.env` 파일** 이다. `.env` 읽기는 외부
+> 라이브러리 없이 내장 기능만으로 직접 파싱한다(`load_env`). `.env` 가
+> 없거나 값이 비면 DB 작업(2·3·4번 메뉴)은 실행되지 않고 어떤 키가
+> 비었는지 안내한다. (CSV 만 보는 1번 메뉴는 `.env` 없이도 동작한다.)
 
 ## 실행
 
