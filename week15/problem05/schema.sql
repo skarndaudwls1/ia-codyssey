@@ -2,6 +2,10 @@
 -- mars_weather 테이블 생성 스크립트.
 -- MySQL Workbench 또는 mysql 클라이언트에서 실행한다.
 --
+-- ※ 동기화 주의: 아래 CREATE TABLE 은 mars_weather_summary.py 의
+--    create_table() DDL 과 반드시 같아야 한다. 한쪽 컬럼/타입을 바꾸면
+--    다른 쪽도 같이 고친다(둘이 어긋나면 코드와 테이블이 다르게 동작).
+--
 -- 사용 예)
 --   mysql -u root -p < schema.sql
 --

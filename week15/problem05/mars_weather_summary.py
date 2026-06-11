@@ -61,6 +61,16 @@ ENV_PATH = os.path.join(APP_DIR, '.env')
 
 TABLE_NAME = 'mars_weather'
 
+# 컬럼 정보를 한 곳에 모아 둔다. 여러 함수에 같은 컬럼 목록이 흩어지면
+# 변경 시 빠뜨리기 쉬우므로, 아래 상수만 고치면 INSERT/조회가 함께 따라온다.
+#
+# CSV 헤더에서 기대하는 컬럼(순서 포함). 마지막 'stom' 은 storm 의 오타다.
+EXPECTED_HEADER = ('weather_id', 'mars_date', 'temp', 'stom')
+# 실제로 테이블에 넣는 컬럼. weather_id 는 AUTO_INCREMENT 라 제외한다.
+DATA_COLUMNS = ('mars_date', 'temp', 'storm')
+# 조회 때 보여줄 컬럼(weather_id 포함).
+SELECT_COLUMNS = ('weather_id',) + DATA_COLUMNS
+
 
 def load_env(path):
     '''.env 파일을 한 줄씩 직접 읽어 환경 변수로 올린다.
@@ -211,31 +221,46 @@ def read_csv_file(path):
         return [], []
 
     header = lines[0].split(',')
+    # 헤더가 기대와 다르면(컬럼 순서가 바뀐 CSV 등) 위치 기반 파싱이 엉뚱한
+    # 값을 넣게 되므로, 먼저 헤더를 대조해 다르면 반영하지 않는다.
+    actual_header = tuple(name.strip().lower() for name in header)
+    if actual_header != EXPECTED_HEADER:
+        print('CSV 헤더가 예상과 달라 이 파일은 반영하지 않습니다.')
+        print('  기대:', ','.join(EXPECTED_HEADER))
+        print('  실제:', ','.join(header))
+        return None, None
+
     rows = []
-    invalid_lines = []
+    problems = []
     for line_number, line in enumerate(lines[1:], start=2):
-        parsed = parse_row(line)
+        parsed, reason = parse_row(line)
         if parsed is None:
-            invalid_lines.append(line_number)
+            problems.append((line_number, reason, line))
             continue
         rows.append(parsed)
 
     # 한 행이라도 테이블 속성과 맞지 않으면, 일부만 넣지 않고 전체를
     # 반영하지 않는다(부분 적재로 데이터가 어긋나는 것을 막는다).
-    if invalid_lines:
-        numbers = ', '.join(str(number) for number in invalid_lines)
+    if problems:
         print('테이블 속성에 맞지 않는 행이 {0}개 있어 이 파일은 '
-              '반영하지 않습니다.'.format(len(invalid_lines)))
-        print('문제가 된 줄 번호:', numbers)
+              '반영하지 않습니다.'.format(len(problems)))
+        for line_number, reason, line in problems:
+            print('  - {0}번 줄({1}): {2}'.format(line_number, reason, line))
         return None, None
     return header, rows
 
 
-def is_valid_mars_date(value):
-    '''mars_date 가 'YYYY-MM-DD' 형식인지 가볍게 검사한다.
+def _is_leap_year(year):
+    '''그레고리력 윤년 여부. (DATETIME 은 그레고리력 기준)'''
+    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
 
-    DATETIME 컬럼에 들어갈 날짜가 그럴듯한지 표준 라이브러리 없이 직접
-    확인한다. 연-월-일 세 토막이 모두 숫자이고 월/일 범위가 맞아야 한다.
+
+def is_valid_mars_date(value):
+    '''mars_date 가 'YYYY-MM-DD' 형식의 실제 존재하는 날짜인지 검사한다.
+
+    DATETIME 컬럼에 들어갈 날짜를 표준 라이브러리 없이 직접 확인한다.
+    연-월-일 세 토막이 모두 숫자여야 하고, 월(1~12)과 일이 그 달의 실제
+    일수 범위 안이어야 한다(예: 2050-02-31 은 거른다).
     '''
     parts = value.split('-')
     if len(parts) != 3:
@@ -245,24 +270,28 @@ def is_valid_mars_date(value):
         return False
     if len(year) != 4:
         return False
-    return 1 <= int(month) <= 12 and 1 <= int(day) <= 31
+    year_value, month_value, day_value = int(year), int(month), int(day)
+    if not 1 <= month_value <= 12:
+        return False
+    days_in_month = (31, 29 if _is_leap_year(year_value) else 28, 31, 30,
+                     31, 30, 31, 31, 30, 31, 30, 31)
+    return 1 <= day_value <= days_in_month[month_value - 1]
 
 
 def parse_row(line):
     '''CSV 한 줄을 (mars_date, temp, storm) 튜플로 바꾼다.
 
-    테이블 속성(mars_date=DATETIME, temp=INT, storm=INT)에 맞지 않으면
-    None 을 돌려주고 어떤 행이 왜 걸러졌는지 안내한다. weather_id 는
-    자동 증가 값이므로 읽기만 하고 버린다(_ 로 표시).
+    성공하면 (튜플, None) 을, 실패하면 (None, 사유문자열) 을 돌려준다.
+    화면 출력은 호출한 쪽이 맡도록 여기서는 print 같은 부작용을 두지
+    않는다(테스트·재사용이 쉬워진다). weather_id 는 자동 증가 값이므로
+    읽기만 하고 버린다(_ 로 표시).
     '''
     fields = line.split(',')
-    if len(fields) != 4:
-        print('  - 컬럼 수(4개)가 맞지 않는 행:', line)
-        return None
+    if len(fields) != len(EXPECTED_HEADER):
+        return None, '컬럼 수({0}개)가 맞지 않음'.format(len(EXPECTED_HEADER))
     _weather_id, mars_date, temp, storm = fields
     if not is_valid_mars_date(mars_date):
-        print('  - mars_date 형식(YYYY-MM-DD)이 아닌 행:', line)
-        return None
+        return None, 'mars_date 형식(YYYY-MM-DD)이 아님'
     # 명세상 temp 는 정수 컬럼이다. CSV 값은 소수('21.4')라 int() 로 바로
     # 못 바꾸므로 float 으로 읽은 뒤 round 로 반올림한다(잘라내기보다 오차가
     # 작다). 숫자가 아니면 ValueError 가 난다.
@@ -270,9 +299,8 @@ def parse_row(line):
         temp_value = round(float(temp))
         storm_value = int(storm)
     except ValueError:
-        print('  - temp/storm 을 정수로 바꿀 수 없는 행:', line)
-        return None
-    return (mars_date, temp_value, storm_value)
+        return None, 'temp/storm 을 정수로 바꿀 수 없음'
+    return (mars_date, temp_value, storm_value), None
 
 
 def print_csv_content(header, rows):
@@ -294,16 +322,21 @@ def print_csv_content(header, rows):
 # 테이블 작업
 # ---------------------------------------------------------------------------
 def create_table(db):
-    '''mars_weather 테이블을 생성한다(없을 때만).'''
+    '''mars_weather 테이블을 생성한다(없을 때만).
+
+    주의: 이 DDL 은 schema.sql 의 테이블 정의와 반드시 일치해야 한다.
+    한쪽 컬럼/타입을 바꾸면 다른 쪽도 같이 고쳐야 한다(둘이 어긋나면
+    Workbench 로 만든 테이블과 코드가 다르게 동작한다).
+    '''
     query = (
-        'CREATE TABLE IF NOT EXISTS ' + TABLE_NAME + ' ('
+        'CREATE TABLE IF NOT EXISTS {0} ('
         '    weather_id INT NOT NULL AUTO_INCREMENT,'
         '    mars_date  DATETIME NOT NULL,'
         '    temp       INT,'
         '    storm      INT,'
         '    PRIMARY KEY (weather_id)'
         ')'
-    )
+    ).format(TABLE_NAME)
     db.execute(query)
     print('테이블 "{0}" 준비 완료.'.format(TABLE_NAME))
 
@@ -313,14 +346,16 @@ def insert_weathers(db, rows):
 
     재실행 시 데이터가 중복되지 않도록 먼저 테이블을 비운다.
     '''
-    before = db.fetch_all('SELECT COUNT(*) FROM ' + TABLE_NAME)[0][0]
-    db.execute('TRUNCATE TABLE ' + TABLE_NAME)
-    query = (
-        'INSERT INTO ' + TABLE_NAME +
-        ' (mars_date, temp, storm) VALUES (%s, %s, %s)'
-    )
+    before = db.fetch_all('SELECT COUNT(*) FROM {0}'.format(TABLE_NAME))[0][0]
+    db.execute('TRUNCATE TABLE {0}'.format(TABLE_NAME))
+    # 컬럼 목록과 자리표시자(%s)를 DATA_COLUMNS 에서 만들어, 컬럼이 바뀌어도
+    # 이 쿼리는 자동으로 따라오게 한다.
+    columns = ', '.join(DATA_COLUMNS)
+    placeholders = ', '.join(['%s'] * len(DATA_COLUMNS))
+    query = 'INSERT INTO {0} ({1}) VALUES ({2})'.format(
+        TABLE_NAME, columns, placeholders)
     inserted = db.execute_many(query, rows)
-    after = db.fetch_all('SELECT COUNT(*) FROM ' + TABLE_NAME)[0][0]
+    after = db.fetch_all('SELECT COUNT(*) FROM {0}'.format(TABLE_NAME))[0][0]
     # 입력 전에 TRUNCATE 로 기존 데이터를 모두 비우므로, 같은 CSV 를 다시
     # 넣으면 행 수가 똑같아 보일 수 있다. 비우고 새로 넣은 것임을 분명히
     # 알리려고 전/후 행 수를 함께 보여준다.
@@ -334,11 +369,11 @@ def show_table(db):
 
     행이 많을 때 print 를 행마다 호출하면 느리므로, 한 번에 모아 출력한다.
     '''
-    total = db.fetch_all('SELECT COUNT(*) FROM ' + TABLE_NAME)
+    total = db.fetch_all('SELECT COUNT(*) FROM {0}'.format(TABLE_NAME))
     print('테이블 행 수:', total[0][0] if total else 0)
     rows = db.fetch_all(
-        'SELECT weather_id, mars_date, temp, storm FROM ' + TABLE_NAME +
-        ' ORDER BY weather_id'
+        'SELECT {0} FROM {1} ORDER BY weather_id'.format(
+            ', '.join(SELECT_COLUMNS), TABLE_NAME)
     )
     body = [
         '  id={0}, 날짜={1}, 기온={2}, 폭풍={3}'.format(
