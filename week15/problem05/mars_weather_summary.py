@@ -303,13 +303,20 @@ def insert_weathers(db, rows):
 
     재실행 시 데이터가 중복되지 않도록 먼저 테이블을 비운다.
     '''
+    before = db.fetch_all('SELECT COUNT(*) FROM ' + TABLE_NAME)[0][0]
     db.execute('TRUNCATE TABLE ' + TABLE_NAME)
     query = (
         'INSERT INTO ' + TABLE_NAME +
         ' (mars_date, temp, storm) VALUES (%s, %s, %s)'
     )
     inserted = db.execute_many(query, rows)
-    print('{0}개 행을 "{1}" 테이블에 입력했습니다.'.format(inserted, TABLE_NAME))
+    after = db.fetch_all('SELECT COUNT(*) FROM ' + TABLE_NAME)[0][0]
+    # 입력 전에 TRUNCATE 로 기존 데이터를 모두 비우므로, 같은 CSV 를 다시
+    # 넣으면 행 수가 똑같아 보일 수 있다. 비우고 새로 넣은 것임을 분명히
+    # 알리려고 전/후 행 수를 함께 보여준다.
+    print('기존 {0}개 행을 비우고 {1}개 행을 새로 입력했습니다. '
+          '(현재 "{2}" 행 수: {3})'.format(
+              before, inserted, TABLE_NAME, after))
 
 
 def show_table(db):
@@ -379,18 +386,16 @@ def find_csv_files():
 def choose_csv_file():
     '''사용할 CSV 파일의 실제 경로를 정해 돌려준다.
 
-    - 폴더에 .csv 가 없으면 안내하고 None.
-    - 한 개뿐이면 그 파일을 그대로 쓴다.
-    - 여러 개면 번호 메뉴로 사용자가 직접 고른다(0 은 취소 -> None).
+    폴더에 .csv 파일이 여러 개일 수 있으므로, 한 개든 여러 개든 항상
+    목록을 보여주고 사용자가 직접 고르게 한다(0 은 취소 -> None).
+    파일이 하나도 없으면 안내하고 None 을 돌려준다.
     '''
     files = find_csv_files()
     if not files:
-        print('CSV 파일을 찾을 수 없습니다:', APP_DIR)
+        print('현재 폴더에 CSV 파일이 없습니다:', APP_DIR)
         return None
-    if len(files) == 1:
-        return os.path.join(APP_DIR, files[0])
 
-    print('CSV 파일이 여러 개입니다. 사용할 파일을 고르세요.')
+    print('현재 폴더에서 찾은 CSV 파일입니다. 어떤 파일을 읽을까요?')
     for index, name in enumerate(files, start=1):
         print('  {0}. {1}'.format(index, name))
     print('  0. 취소')
