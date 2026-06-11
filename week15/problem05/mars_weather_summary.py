@@ -58,7 +58,6 @@ except ImportError:
 # ---------------------------------------------------------------------------
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_FILENAME = 'mars_weathers_data.CSV'
-CSV_PATH = os.path.join(APP_DIR, CSV_FILENAME)
 ENV_PATH = os.path.join(APP_DIR, '.env')
 
 TABLE_NAME = 'mars_weather'
@@ -317,16 +316,35 @@ def run_with_db(action):
         print('데이터베이스 작업 실패:', error)
 
 
+def resolve_csv_path():
+    '''대소문자에 상관없이 CSV 파일의 실제 경로를 찾는다.
+
+    Windows / macOS 는 파일명 대소문자를 구분하지 않지만 Linux 는 구분한다.
+    그래서 OS 를 따지지 않고, 같은 폴더에서 이름이 대소문자만 다른 파일도
+    찾아 준다(.CSV / .csv 등). 기본 이름이 그대로 있으면 그것을, 없으면
+    소문자로 비교해 일치하는 파일을 돌려주고, 못 찾으면 None 을 돌려준다.
+    '''
+    exact_path = os.path.join(APP_DIR, CSV_FILENAME)
+    if os.path.exists(exact_path):
+        return exact_path
+    target = CSV_FILENAME.lower()
+    for name in os.listdir(APP_DIR):
+        if name.lower() == target:
+            return os.path.join(APP_DIR, name)
+    return None
+
+
 def read_csv_or_warn():
     '''CSV 파일을 읽어 (헤더, 행목록) 을 돌려준다.
 
     파일이 없으면 안내 메시지를 출력하고 (None, None) 을 돌려준다.
     파일 존재 확인 코드가 메뉴 곳곳에 중복되지 않도록 한 곳에 모았다.
     '''
-    if not os.path.exists(CSV_PATH):
-        print('CSV 파일을 찾을 수 없습니다:', CSV_PATH)
+    path = resolve_csv_path()
+    if path is None:
+        print('CSV 파일을 찾을 수 없습니다:', os.path.join(APP_DIR, CSV_FILENAME))
         return None, None
-    return read_csv_file(CSV_PATH)
+    return read_csv_file(path)
 
 
 def main():
