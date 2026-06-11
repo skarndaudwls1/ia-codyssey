@@ -264,16 +264,14 @@ def insert_weathers(db, rows):
     print('{0}개 행을 "{1}" 테이블에 입력했습니다.'.format(inserted, TABLE_NAME))
 
 
-def show_table(db, preview=5):
-    '''테이블에 적재된 내용을 일부 조회해서 확인한다.'''
+def show_table(db):
+    '''테이블에 적재된 내용을 전체 조회해서 확인한다.'''
     total = db.fetch_all('SELECT COUNT(*) FROM ' + TABLE_NAME)
     print('테이블 행 수:', total[0][0] if total else 0)
     rows = db.fetch_all(
         'SELECT weather_id, mars_date, temp, storm FROM ' + TABLE_NAME +
-        ' ORDER BY weather_id LIMIT %s',
-        (preview,),
+        ' ORDER BY weather_id'
     )
-    print('앞쪽 {0}개:'.format(preview))
     for weather_id, mars_date, temp, storm in rows:
         print('  id={0}, 날짜={1}, 기온={2}, 폭풍={3}'.format(
             weather_id, mars_date, temp, storm))
@@ -353,7 +351,14 @@ def read_csv_or_warn():
 def main():
     while True:
         print_menu()
-        choice = input('선택> ').strip()
+        try:
+            choice = input('선택> ').strip()
+        except (KeyboardInterrupt, EOFError):
+            # Ctrl+C / Ctrl+D 를 눌러도 오류 추적(traceback) 없이 깔끔하게
+            # 종료한다.
+            print()
+            print('종료합니다.')
+            break
 
         if choice == '1':
             header, rows = read_csv_or_warn()
@@ -375,4 +380,10 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        # 메뉴 입력이 아닌 동작(예: 긴 조회 출력) 도중 Ctrl+C 를 눌러도
+        # 오류 추적 없이 종료한다.
+        print()
+        print('종료합니다.')
