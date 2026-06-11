@@ -216,7 +216,10 @@ def read_csv_file(path):
             print('형식이 맞지 않아 건너뜁니다:', line)
             continue
         _weather_id, mars_date, temp, storm = fields
-        rows.append((mars_date, float(temp), int(storm)))
+        # 명세상 temp 는 정수 컬럼이다. CSV 값은 소수('21.4')라 int() 로
+        # 바로 못 바꾸므로, float 으로 읽은 뒤 round 로 반올림한다(잘라내기
+        # 보다 오차가 작다).
+        rows.append((mars_date, round(float(temp)), int(storm)))
     return header, rows
 
 
@@ -238,7 +241,7 @@ def create_table(db):
         'CREATE TABLE IF NOT EXISTS ' + TABLE_NAME + ' ('
         '    weather_id INT NOT NULL AUTO_INCREMENT,'
         '    mars_date  DATETIME NOT NULL,'
-        '    temp       FLOAT,'
+        '    temp       INT,'
         '    storm      INT,'
         '    PRIMARY KEY (weather_id)'
         ')'

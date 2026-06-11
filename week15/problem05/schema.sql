@@ -8,7 +8,8 @@
 -- 컬럼 정의
 --   weather_id : 자동 증가하는 정수, Primary Key
 --   mars_date  : 필수 입력(NOT NULL) datetime
---   temp       : 화성 기온 (제공 데이터가 소수이므로 FLOAT 로 둔다)
+--   temp       : 화성 기온 정수(INT). 명세에 맞춰 정수로 두고, CSV 의
+--                소수 값은 적재 시 반올림한다.
 --   storm      : 모래 폭풍 세기 정수
 
 CREATE DATABASE IF NOT EXISTS mars_db
@@ -20,7 +21,7 @@ USE mars_db;
 CREATE TABLE IF NOT EXISTS mars_weather (
     weather_id INT NOT NULL AUTO_INCREMENT,
     mars_date  DATETIME NOT NULL,
-    temp       FLOAT,
+    temp       INT,
     storm      INT,
     PRIMARY KEY (weather_id)
 );
