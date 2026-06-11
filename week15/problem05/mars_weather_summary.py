@@ -272,12 +272,11 @@ def parse_row(line):
     return (mars_date, temp_value, storm_value)
 
 
-def print_csv_content(header, rows, preview=5):
-    '''읽어 들인 CSV 내용을 사람이 확인할 수 있게 출력한다.'''
+def print_csv_content(header, rows):
+    '''읽어 들인 CSV 내용을 사람이 확인할 수 있게 전체 출력한다.'''
     print('CSV 헤더:', ','.join(header))
     print('총 데이터 행 수:', len(rows))
-    print('앞쪽 {0}개 미리보기:'.format(preview))
-    for mars_date, temp, storm in rows[:preview]:
+    for mars_date, temp, storm in rows:
         print('  날짜={0}, 기온={1}, 폭풍={2}'.format(mars_date, temp, storm))
 
 
