@@ -21,9 +21,9 @@ CSV 컬럼 안내
   mars_date, temp, storm 세 컬럼만 입력한다.
 
 실행은 본 파일이 있는 폴더에서 한다.
-접속 정보(특히 비밀번호)는 코드에 박지 않고 같은 폴더의 .env 파일이나
-환경 변수로 받는다. .env 는 깃에 올리지 않으며(.gitignore), 키 목록은
-.env.example 을 참고한다.
+접속 정보는 코드에 박지 않고 같은 폴더의 .env 파일이나 환경 변수로
+받는다. .env 는 깃에 올리지 않는다(.gitignore). 필요한 키 목록은
+아래 예시와 같다.
 
     # .env 예시
     MYSQL_HOST=127.0.0.1
@@ -86,14 +86,15 @@ def load_env(path):
 # 코드에 박지 않고 .env(깃 추적 제외) 또는 셸 환경 변수로만 받는다.
 load_env(ENV_PATH)
 
-# 접속 정보. 민감하지 않은 값만 기본값을 두고, 비밀번호는 기본값을 비워
-# .env 나 환경 변수로 반드시 받도록 한다.
+# 접속 정보는 코드에 값을 남기지 않고 .env(또는 환경 변수)에서만 받는다.
+# .env 가 없으면 값이 비어 DB 작업이 실행되지 않으므로, 실행 전에 같은
+# 폴더에 .env 를 만들어 채워야 한다(키 목록은 파일 상단 주석 참고).
 DB_CONFIG = {
-    'host': os.environ.get('MYSQL_HOST', '127.0.0.1'),
-    'port': int(os.environ.get('MYSQL_PORT', '3306')),
-    'user': os.environ.get('MYSQL_USER', 'mars'),
+    'host': os.environ.get('MYSQL_HOST', ''),
+    'port': int(os.environ.get('MYSQL_PORT', '0')),
+    'user': os.environ.get('MYSQL_USER', ''),
     'password': os.environ.get('MYSQL_PASSWORD', ''),
-    'database': os.environ.get('MYSQL_DATABASE', 'mars_db'),
+    'database': os.environ.get('MYSQL_DATABASE', ''),
 }
 
 
@@ -299,9 +300,14 @@ def run_with_db(action):
         print('MySQL 드라이버가 없습니다. '
               'pymysql 또는 mysql-connector-python 을 설치하세요.')
         return
-    if not DB_CONFIG['password']:
-        print('DB 비밀번호가 비어 있습니다. '
-              '.env 파일이나 환경 변수에 MYSQL_PASSWORD 를 지정하세요.')
+    missing = [key for key in ('host', 'user', 'password', 'database')
+               if not DB_CONFIG[key]]
+    if DB_CONFIG['port'] <= 0:
+        missing.append('port')
+    if missing:
+        print('DB 접속 정보가 비어 있습니다:', ', '.join(missing))
+        print('이 파일과 같은 폴더에 .env 를 만들고 값을 채우세요. '
+              '(키 목록은 파일 상단 주석의 .env 예시 참고)')
         return
     try:
         with MySQLHelper(**DB_CONFIG) as db:
