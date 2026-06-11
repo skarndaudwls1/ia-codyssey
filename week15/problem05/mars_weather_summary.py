@@ -394,22 +394,48 @@ def insert_weathers(db, header, rows):
               before, inserted, TABLE_NAME, after))
 
 
-def show_table(db):
-    '''테이블에 적재된 내용을 전체 조회해서 확인한다.
+def format_table(names, rows):
+    '''컬럼 이름과 행들을 받아 칸을 맞춘 표 문자열 리스트로 만든다.
 
-    컬럼 구성을 가정하지 않고 실제 구조를 읽어 헤더로 보여준 뒤, 모든
-    컬럼을 그대로 출력한다. 행이 많을 때 print 를 행마다 호출하면 느리므로
-    한 번에 모아 출력한다.
+    각 컬럼 폭은 헤더와 그 컬럼의 모든 값 중 가장 긴 것에 맞춘다. 컬럼명과
+    값이 모두 ASCII(영문/숫자/날짜)라 글자 수 기준으로 정렬이 잘 맞는다.
+
+        +------------+---------------------+------+-------+
+        | weather_id | mars_date           | temp | storm |
+        +------------+---------------------+------+-------+
+        | 1          | 2050-01-01 00:00:00 | 21   | 56    |
+        +------------+---------------------+------+-------+
+    '''
+    text_rows = [[str(value) for value in row] for row in rows]
+    widths = [len(name) for name in names]
+    for row in text_rows:
+        for index, cell in enumerate(row):
+            if len(cell) > widths[index]:
+                widths[index] = len(cell)
+
+    def make_row(cells):
+        padded = [cell.ljust(widths[index]) for index, cell in enumerate(cells)]
+        return '| ' + ' | '.join(padded) + ' |'
+
+    border = '+' + '+'.join('-' * (width + 2) for width in widths) + '+'
+    lines = [border, make_row(names), border]
+    lines.extend(make_row(row) for row in text_rows)
+    lines.append(border)
+    return lines
+
+
+def show_table(db):
+    '''테이블에 적재된 내용을 전체 조회해서 표 형태로 보여준다.
+
+    컬럼 구성을 가정하지 않고 실제 구조를 읽어 그대로 표로 출력한다. 행이
+    많을 때 print 를 행마다 호출하면 느리므로 한 번에 모아 출력한다.
     '''
     names = [name for name, _type, _auto in get_table_columns(db)]
     total = db.fetch_all('SELECT COUNT(*) FROM {0}'.format(TABLE_NAME))
     print('테이블 행 수:', total[0][0] if total else 0)
-    print('컬럼:', ', '.join(names))
     rows = db.fetch_all('SELECT {0} FROM {1} ORDER BY {2}'.format(
         ', '.join(names), TABLE_NAME, names[0]))
-    body = ['  ' + ', '.join(str(value) for value in row) for row in rows]
-    if body:
-        print('\n'.join(body))
+    print('\n'.join(format_table(names, rows)))
 
 
 # ---------------------------------------------------------------------------
