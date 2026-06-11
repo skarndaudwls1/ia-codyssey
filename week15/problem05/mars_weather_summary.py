@@ -158,7 +158,8 @@ class MySQLHelper:
         connection = self.connect()
         cursor = connection.cursor()
         try:
-            cursor.executemany(query, list(params_list))
+            # params_list 는 이미 리스트로 들어오므로 따로 복사하지 않는다.
+            cursor.executemany(query, params_list)
             connection.commit()
             return cursor.rowcount
         finally:
@@ -202,7 +203,9 @@ def read_csv_file(path):
     이 경우 호출한 쪽은 아무것도 반영하지 않고 메뉴로 돌아간다.
     '''
     with open(path, 'r', encoding='utf-8') as csv_file:
-        lines = [line.strip() for line in csv_file if line.strip()]
+        # 각 줄을 한 번만 strip 한 뒤, 빈 줄을 걸러낸다(strip 중복 호출 제거).
+        lines = [stripped for stripped in (line.strip() for line in csv_file)
+                 if stripped]
 
     if not lines:
         return [], []
@@ -273,11 +276,18 @@ def parse_row(line):
 
 
 def print_csv_content(header, rows):
-    '''읽어 들인 CSV 내용을 사람이 확인할 수 있게 전체 출력한다.'''
+    '''읽어 들인 CSV 내용을 사람이 확인할 수 있게 전체 출력한다.
+
+    행이 많을 때 print 를 행마다 호출하면 느리므로, 한 번에 모아 출력한다.
+    '''
     print('CSV 헤더:', ','.join(header))
     print('총 데이터 행 수:', len(rows))
-    for mars_date, temp, storm in rows:
-        print('  날짜={0}, 기온={1}, 폭풍={2}'.format(mars_date, temp, storm))
+    body = [
+        '  날짜={0}, 기온={1}, 폭풍={2}'.format(mars_date, temp, storm)
+        for mars_date, temp, storm in rows
+    ]
+    if body:
+        print('\n'.join(body))
 
 
 # ---------------------------------------------------------------------------
@@ -320,16 +330,23 @@ def insert_weathers(db, rows):
 
 
 def show_table(db):
-    '''테이블에 적재된 내용을 전체 조회해서 확인한다.'''
+    '''테이블에 적재된 내용을 전체 조회해서 확인한다.
+
+    행이 많을 때 print 를 행마다 호출하면 느리므로, 한 번에 모아 출력한다.
+    '''
     total = db.fetch_all('SELECT COUNT(*) FROM ' + TABLE_NAME)
     print('테이블 행 수:', total[0][0] if total else 0)
     rows = db.fetch_all(
         'SELECT weather_id, mars_date, temp, storm FROM ' + TABLE_NAME +
         ' ORDER BY weather_id'
     )
-    for weather_id, mars_date, temp, storm in rows:
-        print('  id={0}, 날짜={1}, 기온={2}, 폭풍={3}'.format(
-            weather_id, mars_date, temp, storm))
+    body = [
+        '  id={0}, 날짜={1}, 기온={2}, 폭풍={3}'.format(
+            weather_id, mars_date, temp, storm)
+        for weather_id, mars_date, temp, storm in rows
+    ]
+    if body:
+        print('\n'.join(body))
 
 
 # ---------------------------------------------------------------------------
