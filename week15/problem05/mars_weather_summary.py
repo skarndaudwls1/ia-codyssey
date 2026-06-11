@@ -57,7 +57,6 @@ except ImportError:
 # 상수
 # ---------------------------------------------------------------------------
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-CSV_FILENAME = 'mars_weathers_data.CSV'
 ENV_PATH = os.path.join(APP_DIR, '.env')
 
 TABLE_NAME = 'mars_weather'
@@ -198,6 +197,9 @@ def read_csv_file(path):
 
     각 행은 mars_date, temp, storm 값을 담은 튜플이다. 첫 컬럼인
     weather_id 는 테이블에서 자동 증가하므로 읽기만 하고 버린다.
+
+    한 행이라도 테이블 속성과 맞지 않으면 (None, None) 을 돌려준다.
+    이 경우 호출한 쪽은 아무것도 반영하지 않고 메뉴로 돌아간다.
     '''
     with open(path, 'r', encoding='utf-8') as csv_file:
         lines = [line.strip() for line in csv_file if line.strip()]
@@ -207,20 +209,67 @@ def read_csv_file(path):
 
     header = lines[0].split(',')
     rows = []
-    for line in lines[1:]:
-        fields = line.split(',')
-        # 컬럼은 weather_id, mars_date, temp, stom 순서다. 숫자 인덱스 대신
-        # 이름으로 풀어 두면 어떤 값을 쓰는지 한눈에 보인다. weather_id 는
-        # 테이블에서 자동 증가하므로 읽기만 하고 버린다(_ 로 표시).
-        if len(fields) != 4:
-            print('형식이 맞지 않아 건너뜁니다:', line)
+    invalid_lines = []
+    for line_number, line in enumerate(lines[1:], start=2):
+        parsed = parse_row(line)
+        if parsed is None:
+            invalid_lines.append(line_number)
             continue
-        _weather_id, mars_date, temp, storm = fields
-        # 명세상 temp 는 정수 컬럼이다. CSV 값은 소수('21.4')라 int() 로
-        # 바로 못 바꾸므로, float 으로 읽은 뒤 round 로 반올림한다(잘라내기
-        # 보다 오차가 작다).
-        rows.append((mars_date, round(float(temp)), int(storm)))
+        rows.append(parsed)
+
+    # 한 행이라도 테이블 속성과 맞지 않으면, 일부만 넣지 않고 전체를
+    # 반영하지 않는다(부분 적재로 데이터가 어긋나는 것을 막는다).
+    if invalid_lines:
+        numbers = ', '.join(str(number) for number in invalid_lines)
+        print('테이블 속성에 맞지 않는 행이 {0}개 있어 이 파일은 '
+              '반영하지 않습니다.'.format(len(invalid_lines)))
+        print('문제가 된 줄 번호:', numbers)
+        return None, None
     return header, rows
+
+
+def is_valid_mars_date(value):
+    '''mars_date 가 'YYYY-MM-DD' 형식인지 가볍게 검사한다.
+
+    DATETIME 컬럼에 들어갈 날짜가 그럴듯한지 표준 라이브러리 없이 직접
+    확인한다. 연-월-일 세 토막이 모두 숫자이고 월/일 범위가 맞아야 한다.
+    '''
+    parts = value.split('-')
+    if len(parts) != 3:
+        return False
+    year, month, day = parts
+    if not (year.isdigit() and month.isdigit() and day.isdigit()):
+        return False
+    if len(year) != 4:
+        return False
+    return 1 <= int(month) <= 12 and 1 <= int(day) <= 31
+
+
+def parse_row(line):
+    '''CSV 한 줄을 (mars_date, temp, storm) 튜플로 바꾼다.
+
+    테이블 속성(mars_date=DATETIME, temp=INT, storm=INT)에 맞지 않으면
+    None 을 돌려주고 어떤 행이 왜 걸러졌는지 안내한다. weather_id 는
+    자동 증가 값이므로 읽기만 하고 버린다(_ 로 표시).
+    '''
+    fields = line.split(',')
+    if len(fields) != 4:
+        print('  - 컬럼 수(4개)가 맞지 않는 행:', line)
+        return None
+    _weather_id, mars_date, temp, storm = fields
+    if not is_valid_mars_date(mars_date):
+        print('  - mars_date 형식(YYYY-MM-DD)이 아닌 행:', line)
+        return None
+    # 명세상 temp 는 정수 컬럼이다. CSV 값은 소수('21.4')라 int() 로 바로
+    # 못 바꾸므로 float 으로 읽은 뒤 round 로 반올림한다(잘라내기보다 오차가
+    # 작다). 숫자가 아니면 ValueError 가 난다.
+    try:
+        temp_value = round(float(temp))
+        storm_value = int(storm)
+    except ValueError:
+        print('  - temp/storm 을 정수로 바꿀 수 없는 행:', line)
+        return None
+    return (mars_date, temp_value, storm_value)
 
 
 def print_csv_content(header, rows, preview=5):
@@ -317,33 +366,56 @@ def run_with_db(action):
         print('데이터베이스 작업 실패:', error)
 
 
-def resolve_csv_path():
-    '''대소문자에 상관없이 CSV 파일의 실제 경로를 찾는다.
+def find_csv_files():
+    '''같은 폴더에서 확장자가 .csv 인 파일 이름을 모두 찾아 정렬해 돌려준다.
 
-    Windows / macOS 는 파일명 대소문자를 구분하지 않지만 Linux 는 구분한다.
-    그래서 OS 를 따지지 않고, 같은 폴더에서 이름이 대소문자만 다른 파일도
-    찾아 준다(.CSV / .csv 등). 기본 이름이 그대로 있으면 그것을, 없으면
-    소문자로 비교해 일치하는 파일을 돌려주고, 못 찾으면 None 을 돌려준다.
+    특정 파일명을 미리 정해두지 않고, 폴더에 있는 .csv 파일을 그때그때
+    훑는다. 대소문자는 구분하지 않으므로 .CSV / .csv 를 모두 포함한다.
     '''
-    exact_path = os.path.join(APP_DIR, CSV_FILENAME)
-    if os.path.exists(exact_path):
-        return exact_path
-    target = CSV_FILENAME.lower()
-    for name in os.listdir(APP_DIR):
-        if name.lower() == target:
-            return os.path.join(APP_DIR, name)
+    names = [name for name in os.listdir(APP_DIR)
+             if name.lower().endswith('.csv')]
+    return sorted(names)
+
+
+def choose_csv_file():
+    '''사용할 CSV 파일의 실제 경로를 정해 돌려준다.
+
+    - 폴더에 .csv 가 없으면 안내하고 None.
+    - 한 개뿐이면 그 파일을 그대로 쓴다.
+    - 여러 개면 번호 메뉴로 사용자가 직접 고른다(0 은 취소 -> None).
+    '''
+    files = find_csv_files()
+    if not files:
+        print('CSV 파일을 찾을 수 없습니다:', APP_DIR)
+        return None
+    if len(files) == 1:
+        return os.path.join(APP_DIR, files[0])
+
+    print('CSV 파일이 여러 개입니다. 사용할 파일을 고르세요.')
+    for index, name in enumerate(files, start=1):
+        print('  {0}. {1}'.format(index, name))
+    print('  0. 취소')
+    answer = input('CSV 선택> ').strip()
+    if not answer.isdigit():
+        print('숫자를 입력하세요.')
+        return None
+    number = int(answer)
+    if number == 0:
+        return None
+    if 1 <= number <= len(files):
+        return os.path.join(APP_DIR, files[number - 1])
+    print('범위를 벗어난 번호입니다.')
     return None
 
 
 def read_csv_or_warn():
-    '''CSV 파일을 읽어 (헤더, 행목록) 을 돌려준다.
+    '''사용할 CSV 파일을 정해 읽고 (헤더, 행목록) 을 돌려준다.
 
-    파일이 없으면 안내 메시지를 출력하고 (None, None) 을 돌려준다.
-    파일 존재 확인 코드가 메뉴 곳곳에 중복되지 않도록 한 곳에 모았다.
+    파일이 없거나 선택을 취소하면 (None, None) 을 돌려준다. 파일 선택
+    코드가 메뉴 곳곳에 중복되지 않도록 한 곳에 모았다.
     '''
-    path = resolve_csv_path()
+    path = choose_csv_file()
     if path is None:
-        print('CSV 파일을 찾을 수 없습니다:', os.path.join(APP_DIR, CSV_FILENAME))
         return None, None
     return read_csv_file(path)
 
